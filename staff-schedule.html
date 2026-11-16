@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Schedule – WMS</title>
+<link rel="stylesheet" href="assets/wms.css">
+<style>
+  .week-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+  @media (max-width: 1000px) { .week-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); } }
+  .day { border: 1.5px solid var(--line); border-radius: var(--r); padding: 8px; min-height: 120px; display: flex; flex-direction: column; gap: 8px; background: var(--fill-2); }
+  .day h3 { font-size: 14px; margin: 0; }
+  .day.today { border: 2px solid var(--ink); }
+  .shift { text-align: left; width: 100%; border: 2px solid var(--ink); border-radius: var(--r); background: #fff; padding: 8px; font-size: 14px; font: inherit; cursor: pointer; display: flex; flex-direction: column; gap: 4px; min-height: 44px; color: var(--ink); }
+  .shift:hover { background: var(--fill); }
+  .shift.tentative { border-style: dashed; border-color: var(--muted); color: var(--muted); cursor: default; background: #fff; }
+  .shift.done { border-color: var(--line); color: var(--muted); cursor: default; }
+  .shift.rejected { border-color: var(--err); }
+  .shift strong { font-size: 15px; }
+  .shift .chip { font-size: 12px; padding: 1px 7px; white-space: normal; max-width: 100%; }
+  .off { color: var(--muted); font-size: 14px; }
+  .meter { display: flex; flex-direction: column; gap: 8px; }
+  .bar-row { display: grid; grid-template-columns: 96px 1fr 44px; gap: 8px; align-items: center; font-size: 14px; }
+  .bar { height: 14px; background: var(--fill); border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+  .bar span { display: block; height: 100%; background: var(--muted); }
+  .big { font-size: 34px; font-weight: 800; line-height: 1.1; }
+  .team td { font-size: 14px; white-space: nowrap; }
+  .team .state { display: block; font-weight: 600; }
+</style>
+</head>
+<body data-group="staff" data-active="schedule">
+<main id="main">
+  <!-- Fig 5.1.7 Staff Landing Page (FR-11), 5.2.5 Timetable staff view (FR-33), 5.2.11 Tentative Draft (FR-37),
+       5.4.1–5.4.4 Shift rejection (FR-18, FR-19, FR-20). UC-03, UC-04. -->
+  <div class="page-head">
+    <div>
+      <h1>My Schedule</h1>
+      <p class="sub">Today: Fri 27 Nov 2026</p>
+    </div>
+  </div>
+  <div id="flash"></div>
+
+  <div class="row">
+    <section class="col-main" aria-labelledby="wk-h">
+      <h2 id="wk-h" class="sr-only">My shifts by week</h2>
+      <div class="tabs" role="tablist" id="week-tabs"></div>
+      <div id="week-banner"></div>
+      <div class="week-grid" id="week-grid"></div>
+      <p class="hint" style="margin-top:8px">Select a published shift to reject it or request a swap.</p>
+    </section>
+
+    <aside class="col-side stack" aria-label="My hours">
+      <div class="card meter">
+        <h2 style="margin:0">Hours – November 2026</h2>
+        <div><span class="big" id="month-total"></span> <span class="muted">assigned</span></div>
+        <div id="month-bars"></div>
+      </div>
+      <div class="card">
+        <h2 style="margin:0 0 4px">This week</h2>
+        <p style="margin:0"><span class="big" id="week-hours"></span> <span class="muted">across <span id="week-count"></span> shifts</span></p>
+      </div>
+    </aside>
+  </div>
+
+  <section class="section" aria-labelledby="team-h">
+    <h2 id="team-h">Team this week</h2>
+    <p class="hint" style="margin:-6px 0 10px">Colleagues show only Active, On Leave or Unavailable. Reasons are never shown.</p>
+    <div id="team"></div>
+  </section>
+</main>
+
+<script src="assets/wms.js"></script>
+<script>
+(function () {
+  var W = WMS, me = W.currentUser();
+  var TEAM = [
+    { name: 'Daniel Ho', role: 'Paramedic', days: ['Day', '', 'Day', 'On Leave', 'On Leave', '', 'Night'] },
+    { name: 'Siti Rahim', role: 'Paramedic', days: ['Night', 'Night', '', '', 'Unavailable', 'Day', ''] },
+    { name: 'Nur Aisyah', role: 'Paramedic', days: ['Day', 'Day', '', 'Night', '', '', ''] },
+    { name: 'Ravi Kumar', role: 'Care Assistant', days: ['Day', 'Day', '', 'Night', '', '', 'Day'] },
+    { name: 'Jun Wei Lee', role: 'Care Assistant', days: ['', 'Unavailable', 'Day', 'Day', '', 'Night', 'Night'] },
+    { name: 'Marcus Tan', role: 'Driver', days: ['Day', '', 'Day', '', 'Night', 'Night', ''] }
+  ].filter(function (p) { return p.name !== me.name; });
+
+  var weekId = W.store.get('schedule.week', '2026-11-30');
+  function published0712() { return W.store.get('published0712', false); }
+  function weekOf(id) { return W.WEEKS.filter(function (w) { return w.id === id; })[0]; }
+  function isDraft(w) { return w.draft && !published0712(); }
+  function rejected() { return W.store.get('rejected', {}); }
+  function swaps() { return W.store.get('swaps', []); }
+
+  function shiftState(s) {
+    var w = weekOf(s.week);
+    if (rejected()[s.id]) return 'rejected';
+    if (isDraft(w)) return 'tentative';
+    if (s.date < W.TODAY) return 'done';
+    if (s.date === W.TODAY) return 'now';
+    if (swaps().some(function (x) { return x.myShift === s.id && x.status !== 'Declined'; })) return 'swap';
+    return 'open';
+  }
+  var CHIP = {
+    open: '<span class="chip">Published</span>',
+    tentative: '<span class="chip tentative">Tentative</span>',
+    done: '<span class="chip muted">Completed</span>',
+    now: '<span class="chip solid">On duty now</span>',
+    rejected: '<span class="chip err">Rejected</span>',
+    swap: '<span class="chip">' + 'Swap pending</span>'
+  };
+
+  function renderTabs() {
+    var el = document.getElementById('week-tabs');
+    el.innerHTML = W.WEEKS.map(function (w) {
+      var st = isDraft(w) ? 'Tentative' : 'Published';
+      return '<button role="tab" aria-selected="' + (w.id === weekId) + '" data-w="' + w.id + '">' + w.label + '<span class="small">' + st + '</span></button>';
+    }).join('');
+    el.querySelectorAll('[data-w]').forEach(function (b) {
+      b.addEventListener('click', function () { weekId = b.getAttribute('data-w'); W.store.set('schedule.week', weekId); render(); });
+    });
+  }
+
+  function renderWeek() {
+    var w = weekOf(weekId);
+    document.getElementById('week-banner').innerHTML = isDraft(w)
+      ? '<div class="banner dashed">' + W.ICONS.clock + '<p><strong>Tentative – not yet published.</strong> These shifts may still change. You can view them but not edit, reject or swap them.</p></div>'
+      : '';
+    var html = '';
+    for (var i = 0; i < 7; i++) {
+      var d = W.addDays(w.id, i);
+      var mine = W.MY_SHIFTS.filter(function (s) { return s.date === d; });
+      html += '<div class="day' + (d === W.TODAY ? ' today' : '') + '"><h3>' + W.fmtDate(d) + (d === W.TODAY ? ' · Today' : '') + '</h3>';
+      if (!mine.length) html += '<span class="off">Off</span>';
+      mine.forEach(function (s) {
+        var st = shiftState(s);
+        var cls = st === 'tentative' ? 'tentative' : (st === 'done' || st === 'now') ? 'done' : st === 'rejected' ? 'rejected' : '';
+        var clickable = st === 'open';
+        html += '<button class="shift ' + cls + '" data-s="' + s.id + '"' + (clickable ? '' : ' aria-disabled="true"') + '>' +
+          '<strong>' + s.slot + '</strong><span>' + W.SLOT_TIME[s.slot] + '</span><span>' + s.amb + '</span>' + CHIP[st] + '</button>';
+      });
+      html += '</div>';
+    }
+    var g = document.getElementById('week-grid'); g.innerHTML = html;
+    g.querySelectorAll('.shift').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var s = W.MY_SHIFTS.filter(function (x) { return x.id === b.getAttribute('data-s'); })[0];
+        var st = shiftState(s);
+        if (st === 'open') openShift(s);
+        else if (st === 'tentative') W.toast('Tentative shifts are read-only until the roster is published.');
+        else if (st === 'now') location.href = 'staff-dispatch.html';
+      });
+    });
+    var mineWeek = W.MY_SHIFTS.filter(function (s) { return s.week === w.id && !rejected()[s.id]; });
+    document.getElementById('week-hours').textContent = (mineWeek.length * 12) + ' h';
+    document.getElementById('week-count').textContent = mineWeek.length;
+  }
+
+  function renderMonth() {
+    var weeks = [['02 – 08 Nov', 36], ['09 – 15 Nov', 36], ['16 – 22 Nov', 36]];
+    var lastWeek = W.MY_SHIFTS.filter(function (s) { return s.week === '2026-11-23' && !rejected()[s.id]; }).length * 12;
+    var nov30 = W.MY_SHIFTS.filter(function (s) { return s.date === '2026-11-30' && !rejected()[s.id]; }).length * 12;
+    weeks.push(['23 – 29 Nov', lastWeek]); weeks.push(['30 Nov', nov30]);
+    var total = weeks.reduce(function (a, b) { return a + b[1]; }, 0);
+    document.getElementById('month-total').textContent = total + ' h';
+    document.getElementById('month-bars').innerHTML = weeks.map(function (x) {
+      return '<div class="bar-row"><span>' + x[0] + '</span><span class="bar" aria-hidden="true"><span style="width:' + (x[1] / 48 * 100) + '%"></span></span><span>' + x[1] + ' h</span></div>';
+    }).join('');
+  }
+
+  function renderTeam() {
+    var w = weekOf(weekId), el = document.getElementById('team');
+    if (isDraft(w)) { el.innerHTML = '<p class="muted">The team timetable appears once this week is published.</p>'; return; }
+    var head = '<tr><th scope="col">Colleague</th>';
+    for (var i = 0; i < 7; i++) head += '<th scope="col">' + W.fmtDate(W.addDays(w.id, i)) + '</th>';
+    head += '</tr>';
+    var rows = TEAM.map(function (p) {
+      return '<tr><th scope="row">' + p.name + '<span class="small muted" style="display:block;font-weight:400">' + p.role + '</span></th>' +
+        p.days.map(function (v) {
+          if (v === 'Day' || v === 'Night') return '<td><span class="state">Active</span><span class="small muted">' + v + '</span></td>';
+          if (v) return '<td><span class="state">' + v + '</span></td>';
+          return '<td class="muted">–</td>';
+        }).join('') + '</tr>';
+    }).join('');
+    el.innerHTML = '<div class="table-wrap"><table class="team"><thead>' + head + '</thead><tbody>' + rows + '</tbody></table></div>';
+  }
+
+  /* ---- Shift actions ---- */
+  function openShift(s) {
+    W.modal({
+      title: 'Shift details',
+      html: '<p style="margin:0 0 4px"><strong>' + W.fmtDate(s.date, { year: true }) + '</strong></p><p style="margin:0">' + s.slot + ' ' + W.SLOT_TIME[s.slot] + ' · ' + s.amb + '</p>',
+      actions: [
+        { label: 'Close' },
+        { label: 'Request swap', onClick: function () { location.href = 'staff-requests.html?swap=' + s.id; } },
+        { label: 'Reject shift', danger: true, primary: true, onClick: function () { setTimeout(function () { rejectForm(s); }, 0); } }
+      ]
+    });
+  }
+
+  function rejectForm(s, prev) {
+    W.modal({
+      title: 'Reject shift',
+      html: '<p style="margin:0 0 12px">' + W.esc(W.shiftLabel(s)) + '</p>' +
+        '<div class="field"><label for="reason">Reason<span class="req" aria-hidden="true">*</span></label>' +
+        '<textarea id="reason" aria-describedby="reason-hint"></textarea>' +
+        '<p class="hint" id="reason-hint">At least 15 characters, not counting spaces. <span id="count">0</span>/15</p></div>',
+      onOpen: function (o) {
+        var t = o.querySelector('#reason'); t.value = prev || '';
+        var c = o.querySelector('#count'); var upd = function () { c.textContent = W.nonWs(t.value); }; upd();
+        t.addEventListener('input', function () { upd(); if (W.nonWs(t.value) >= 15) W.clearErrors(o); });
+      },
+      actions: [
+        { label: 'Cancel' },
+        { label: 'Continue', primary: true, onClick: function (o) {
+            var t = o.querySelector('#reason');
+            if (W.nonWs(t.value) < 15) { W.setError(t, 'Enter at least 15 characters (spaces not counted).'); t.focus(); return true; }
+            var reason = t.value.trim();
+            setTimeout(function () { warn(s, reason); }, 0);
+          } }
+      ]
+    });
+  }
+
+  function warn(s, reason) {
+    W.modal({
+      title: 'Discuss with your Manager first',
+      html: '<div class="banner" style="margin:0">' + W.ICONS.alert + '<p>Please talk to your Manager, Rachel Lim, before you reject this shift. Rejecting it leaves your crew position on ' + W.esc(s.amb) + ' unstaffed.</p></div>',
+      onCancel: function () { W.toast('Rejection cancelled. Your shift is unchanged.'); },
+      actions: [
+        { label: 'Dismiss', onClick: function () { W.toast('Rejection cancelled. Your shift is unchanged.'); } },
+        { label: 'Confirm rejection', danger: true, primary: true, onClick: function () {
+            var r = rejected(); r[s.id] = { reason: reason, at: Date.now() }; W.store.set('rejected', r);
+            W.notify(me.name + ' rejected ' + W.fmtDate(s.date) + ', ' + s.slot + ' (' + s.amb + '). The ' + me.role + ' position is now unstaffed.', 'rachel.lim');
+            document.getElementById('flash').innerHTML = '<div class="banner ok" role="status">' + W.ICONS.check +
+              '<p><strong>Shift rejected.</strong> ' + W.esc(W.shiftLabel(s)) + ' is now marked unstaffed. Your Manager has been notified by email and dashboard alert.</p></div>';
+            render();
+          } }
+      ]
+    });
+  }
+
+  function render() { renderTabs(); renderWeek(); renderMonth(); renderTeam(); }
+  render();
+
+  W.controls([
+    { label: 'Simulate roster for 07 – 13 Dec published', pressed: published0712(), onClick: function () {
+        var on = !published0712(); W.store.set('published0712', on);
+        if (on) { W.notify('Your roster for 07 – 13 Dec 2026 has been published.'); W.openInbox(); }
+        render(); return on;
+      } }
+  ]);
+})();
+</script>
+</body>
+</html>

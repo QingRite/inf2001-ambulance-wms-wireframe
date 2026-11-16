@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Page to build – WMS</title>
+<link rel="stylesheet" href="assets/wms.css">
+</head>
+<body>
+<script>
+/* Placeholder for pages still to be built by teammates.
+   Each entry lists the owner, requirements, use cases and notes from M1/M2.
+   Replace the todo.html?p=... link in assets/wms.js (NAV) with your real file when done. */
+var TODO = {
+  'manager-overview': { group: 'manager', title: 'Manager Overview', owner: 'Mustaqim (WBS 4.3)', frs: 'FR-02, FR-03, FR-04, FR-05, FR-06', ucs: 'UC-11', figs: 'Fig.5.1.4, 5.1.5, 5.1.6',
+    notes: ['Weekly hours of every staff member for the selected Mon–Sun week, the three lowest-hours staff (ascending hours, then name), and an "Over 40h" warning that does not block allocation.',
+            'Status, crew and utilization of all 10 ambulances; flag any crew without 1 Driver, 1 Care Assistant and 2 Paramedics.',
+            'M1 spec (FR-06): critical banner on this dashboard when fewer than six fully staffed ambulances are in service for a 12-hour slot.',
+            'M1 feedback (M-01): "I can see the three lowest-workload staff and who is over 40 hours straight away."'] },
+  'manager-allocation': { group: 'manager', title: 'Weekly Allocation', owner: 'Mustaqim (WBS 4.3)', frs: 'FR-07, FR-08, FR-09, FR-10, FR-35', ucs: 'UC-10, UC-16', figs: 'Fig.5.2.1, 5.2.2, 5.2.3, 5.2.7, 5.2.8, 5.2.9',
+    notes: ['Draft roster for one week; each staff row shows weekly hours, preferences, location zone and availability. Compare up to three staff side by side.',
+            'FR-10 / M1 feedback (M-01): block an assignment with less than 12 h rest, name the conflicting shift AND say how many hours of rest the person would get.',
+            'Publish rule = WeeklyRoster.checkStaffingRequirements (white-box section 4.2): a crew is fully staffed with at least 1 Driver, 1 Care Assistant and 2 Paramedics; publish only when at least 6 ambulances are fully staffed in every 12-hour slot. Otherwise keep the roster in Draft and show "Fewer than six fully staffed ambulances in service".',
+            'Use the white-box test data so the demo matches 4.2.5: slot Mon 07 Dec 2026 08:00–20:00, AMB-01 to AMB-06, staff DRV-01–06, CA-01–06, PM-01–12.',
+            'M1 spec: warning pop-up on this screen when coverage drops below six. On publish, notify affected staff (staff side already shows this: staff-schedule.html, "Simulate roster published").'] },
+  'manager-coverage': { group: 'manager', title: 'Staffing Coverage', owner: 'Mustaqim (WBS 4.3)', frs: 'FR-05, FR-06, FR-34', ucs: 'UC-11', figs: 'Fig.5.2.6 (+ new coverage figure)',
+    notes: ['For a selected date: status, base location and job count of every staff member on duty; per-slot count of fully staffed ambulances.',
+            'M1 feedback (M-01): "I found the slot with a missing paramedic quickly. This is what I need before I publish."'] },
+  'manager-timetable': { group: 'manager', title: 'Timetable (Manager view)', owner: 'Not assigned in the WBS – suggest Mustaqim or Kiyonn', frs: 'FR-33', ucs: 'UC-11', figs: 'Fig.5.2.4',
+    notes: ['Central weekly timetable for all staff. Managers see approved leave categories (Annual Leave, Medical Leave...).',
+            'The staff view of the same timetable is already built: staff-schedule.html, "Team this week" (peers show only Active, On Leave or Unavailable).'] },
+  'manager-requests': { group: 'manager', title: 'Requests to Review', owner: 'Mustaqim (WBS 4.3)', frs: 'FR-15, FR-16', ucs: 'UC-13', figs: 'Fig.5.3.8, 5.3.9',
+    notes: ['Late availability requests: approve updates the staff member\'s availability; reject leaves it unchanged.',
+            'M1 feedback (M-01): "Please show the reason the staff member gave on the card so I don\'t have to open it."',
+            'Requests sent from staff-availability.html are saved in the browser under localStorage key "wms.lateRequests" if you want to list them.'] },
+  'manager-swaps': { group: 'manager', title: 'Swaps & Stand-ins', owner: 'Joel (WBS 4.4)', frs: 'FR-20, FR-22, FR-24, FR-25', ucs: 'UC-12, UC-14', figs: 'Fig.5.4.5, 5.5.3, 5.5.4, 5.6.3, 5.6.4, 5.6.5',
+    notes: ['Swap approval: only swaps already accepted by the receiving staff member appear; assignments change only after the Manager approves.',
+            'Stand-ins: list off-duty standby staff with the required role, not on leave, meeting the 12-hour rest rule. M1 spec button label: "Confirm Stand-In Assignment". Notify the replacement.',
+            'Rejected shifts (FR-20) show the crew position as "Unstaffed". Staff-side data: localStorage keys "wms.swaps" and "wms.rejected".'] },
+  'manager-leave': { group: 'manager', title: 'Leave Records', owner: 'Joel (WBS 4.4)', frs: 'FR-23, FR-36, FR-41', ucs: 'UC-05, UC-15', figs: 'Fig.5.6.1, 5.6.6',
+    notes: ['Manager can record an absence for a staff member (same form as staff-requests.html "Record an absence").',
+            'Consolidated leave records, medical certificates and unavailability notes, filterable by date range, leave category and staff name. Manager-only (FR-41).'] },
+  'admin-accounts': { group: 'admin', title: 'Accounts', owner: 'Joel (WBS 4.4)', frs: 'FR-28, FR-29, FR-42, FR-43, BR-02', ucs: 'UC-17', figs: 'Fig.5.8.1 – 5.8.7',
+    notes: ['Create, edit and deactivate accounts. Confidential fields show "Restricted – Manager access only" to IT Admin (FR-42).',
+            'BR-02: block deactivation of anyone on an ongoing shift or confirmed replacement.',
+            'Login already shows the deactivated state: username alex.wong.',
+            'M1 feedback (IT-01): "I didn\'t see where I\'d create accounts or change roles."'] },
+  'admin-roles': { group: 'admin', title: 'Roles & Permissions', owner: 'Joel (WBS 4.4)', frs: 'FR-28, FR-29 (role and permission parts)', ucs: 'UC-18', figs: 'New figure (add to 5.8)',
+    notes: ['Show a user\'s current role and permissions, accept changes, validate the configuration, then save. M1 class model: UserAccount – Role – Permission.'] },
+  'admin-audit': { group: 'admin', title: 'Audit Log (optional)', owner: 'Joel (WBS 4.4) – team decision', frs: 'FR-32, NFR-16', ucs: '–', figs: 'Fig.5.9.3 (optional)',
+    notes: ['Read-only table: timestamp, acting user, IP address, action, target record, previous and new value. No edit or delete controls. Must not reveal fields blocked by FR-42.'] }
+};
+var key = new URLSearchParams(location.search).get('p');
+var T = TODO[key] || { group: 'staff', title: 'Unknown page', owner: '–', frs: '–', ucs: '–', figs: '–', notes: ['No placeholder for "' + key + '".'] };
+document.body.setAttribute('data-group', T.group);
+document.body.setAttribute('data-active', key || '');
+document.title = T.title + ' (to build) – WMS';
+</script>
+<main id="main">
+  <div class="banner dashed" style="margin-top:8px">
+    <span id="ic"></span>
+    <div>
+      <p><strong>Placeholder – page still to be built.</strong> This screen is not part of the design. It tells the builder what the page must cover.</p>
+    </div>
+  </div>
+  <h1 id="t"></h1>
+  <div class="table-wrap" style="margin:16px 0 20px">
+    <table>
+      <tbody>
+        <tr><th scope="row" style="width:180px">Builder</th><td id="owner"></td></tr>
+        <tr><th scope="row">Requirements</th><td id="frs"></td></tr>
+        <tr><th scope="row">Use cases</th><td id="ucs"></td></tr>
+        <tr><th scope="row">Report figures</th><td id="figs"></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h2>Notes</h2>
+  <ul id="notes"></ul>
+  <p class="muted small">How to build it: copy <code>_template.html</code>, rename it, then point this nav item to your file in <code>assets/wms.js</code> (the NAV list). See README.md.</p>
+</main>
+<script src="assets/wms.js"></script>
+<script>
+  document.getElementById('ic').innerHTML = WMS.ICONS.info;
+  document.getElementById('t').textContent = T.title;
+  document.getElementById('owner').textContent = T.owner;
+  document.getElementById('frs').textContent = T.frs;
+  document.getElementById('ucs').textContent = T.ucs;
+  document.getElementById('figs').textContent = T.figs;
+  document.getElementById('notes').innerHTML = T.notes.map(function (n) { return '<li style="margin-bottom:8px">' + WMS.esc(n) + '</li>'; }).join('');
+  WMS.controls([]);
+</script>
+</body>
+</html>

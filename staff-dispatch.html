@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dispatch – WMS</title>
+<link rel="stylesheet" href="assets/wms.css">
+<style>
+  /* M1 spec (FR-26): job card in large text for reading on a phone */
+  .job { border: 2px solid var(--ink); border-radius: 8px; padding: 20px; font-size: 18px; }
+  .job dl { display: grid; grid-template-columns: minmax(150px, max-content) 1fr; gap: 10px 20px; margin: 16px 0 0; }
+  .job dt { color: var(--muted); font-size: 15px; padding-top: 3px; }
+  .job dd { margin: 0; font-weight: 600; }
+  .job .head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; }
+  .job .head h2 { font-size: 22px; margin: 0; }
+  .crew { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+  .big { font-size: 34px; font-weight: 800; line-height: 1.1; }
+  @media (max-width: 560px) { .job dl { grid-template-columns: 1fr; gap: 2px; } .job dd { margin-bottom: 10px; } }
+</style>
+</head>
+<body data-group="staff" data-active="dispatch">
+<main id="main">
+  <!-- Paramedic / Care Assistant: Fig 5.7.1 Dispatch details with masked NRIC (FR-26, FR-39), 5.7.2 No longer available (FR-40). UC-08.
+       Driver: Fig 5.1.8 Driver details (FR-27). UC-09. -->
+  <div class="page-head">
+    <div>
+      <h1 id="title">Dispatch</h1>
+      <p class="sub" id="sub"></p>
+    </div>
+  </div>
+  <div id="content"></div>
+</main>
+
+<script src="assets/wms.js"></script>
+<script>
+(function () {
+  var W = WMS, me = W.currentUser(), isDriver = me.role === 'Driver';
+  var CREW = [['Marcus Tan', 'Driver'], ['Ravi Kumar', 'Care Assistant'], ['Nur Aisyah', 'Paramedic'], ['Daniel Ho', 'Paramedic']];
+  function after24() { return W.store.get('dispatch.after24', false); }
+  function noAmb() { return W.store.get('dispatch.noAmb', false); }
+  function maskNric(n) { return n.charAt(0) + '****' + n.slice(-4); }   // FR-39: mask before display
+
+  var ACTIVE = { id: 'J-2058', time: '10:42', patient: 'Lim Mei Ling', nric: 'S7712567D', pickup: 'Blk 123 Ang Mo Kio Ave 3, #05-12', dest: 'Tan Tock Seng Hospital, Emergency Department', cond: 'Shortness of breath. Conscious and talking.' };
+  var DONE = [
+    { id: 'J-2051', when: 'Today, 08:55', patient: 'Tan Boon Huat', nric: 'S5409123B', pickup: '20 Yio Chu Kang Rd', dest: 'Khoo Teck Puat Hospital', cond: 'Fall at home, hip pain.', until: 'Sat 28 Nov, 20:00', shiftEnd: 'today' },
+    { id: 'J-2017', when: 'Mon 23 Nov, 14:10', until: 'Tue 24 Nov, 20:00', shiftEnd: 'past' }
+  ];
+
+  function crewList() {
+    return '<ul class="crew">' + CREW.map(function (c) { return '<li>' + c[0] + ' <span class="muted">· ' + c[1] + '</span></li>'; }).join('') + '</ul>';
+  }
+
+  function medical() {
+    document.getElementById('sub').textContent = 'AMB-03 · Fri 27 Nov, Day 08:00–20:00';
+    var active = after24()
+      ? '<div class="banner">' + W.ICONS.info + '<p>No active job. Your shift has ended.</p></div>'
+      : '<article class="job" aria-labelledby="job-h"><div class="head"><h2 id="job-h">Active job ' + ACTIVE.id + '</h2><span class="chip solid">Dispatched ' + ACTIVE.time + '</span></div>' +
+        '<dl><dt>Patient</dt><dd>' + ACTIVE.patient + '</dd>' +
+        '<dt>NRIC</dt><dd>' + maskNric(ACTIVE.nric) + ' <span class="small muted" style="font-weight:400">masked</span></dd>' +
+        '<dt>Pickup</dt><dd>' + ACTIVE.pickup + '</dd>' +
+        '<dt>Destination</dt><dd>' + ACTIVE.dest + '</dd>' +
+        '<dt>Reported condition</dt><dd>' + ACTIVE.cond + '</dd></dl></article>';
+    var done = DONE.map(function (j) {
+      var gone = j.shiftEnd === 'past' || after24();
+      return '<tr><td><strong>' + j.id + '</strong></td><td>' + j.when + '</td><td>' +
+        (gone ? '<span class="chip muted">No longer available</span><span class="small muted" style="display:block;margin-top:4px">More than 24 hours after the shift ended</span>'
+              : '<button class="btn small" data-j="' + j.id + '">View details</button><span class="small muted" style="display:block;margin-top:4px">Available until ' + j.until + '</span>') +
+        '</td></tr>';
+    }).join('');
+    document.getElementById('content').innerHTML =
+      '<div class="row"><div class="col-main">' + active + '</div>' +
+      '<aside class="col-side"><div class="card"><h2>Crew on AMB-03</h2>' + crewList() + '</div></aside></div>' +
+      '<section class="section"><h2>Completed jobs</h2><div class="table-wrap"><table><thead><tr><th>Job</th><th>Completed</th><th>Details</th></tr></thead><tbody>' + done + '</tbody></table></div></section>';
+    document.querySelectorAll('[data-j]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var j = DONE.filter(function (x) { return x.id === b.getAttribute('data-j'); })[0];
+        W.modal({ title: 'Job ' + j.id + ' (completed)', html: '<dl style="display:grid;grid-template-columns:max-content 1fr;gap:6px 16px;margin:0">' +
+          '<dt class="muted">Patient</dt><dd style="margin:0">' + j.patient + '</dd><dt class="muted">NRIC</dt><dd style="margin:0">' + maskNric(j.nric) + '</dd>' +
+          '<dt class="muted">Pickup</dt><dd style="margin:0">' + j.pickup + '</dd><dt class="muted">Destination</dt><dd style="margin:0">' + j.dest + '</dd>' +
+          '<dt class="muted">Condition</dt><dd style="margin:0">' + j.cond + '</dd></dl><p class="hint" style="margin-top:12px">These details disappear ' + j.until + ', 24 hours after the shift ends.</p>',
+          actions: [{ label: 'Close', primary: true }] });
+      });
+    });
+  }
+
+  function driver() {
+    document.getElementById('title').textContent = 'My vehicle and driving';
+    document.getElementById('sub').textContent = 'Fri 27 Nov, Day 08:00–20:00';
+    var quals = [['Class 3 – light vehicles', '12 Mar 2028'], ['Class 4 – medium vehicles', '05 Aug 2027'], ['Emergency vehicle operations', '30 Jun 2027']];
+    var vehicle = noAmb()
+      ? '<div class="banner">' + W.ICONS.info + '<p><strong>No ambulance assigned for this shift.</strong> Contact your Manager, Rachel Lim, before you start driving.</p></div>'
+      : '<article class="job"><div class="head"><h2>AMB-03</h2><span class="chip">In service</span></div><dl><dt>Registration</dt><dd>SJA 4821 C</dd><dt>Base</dt><dd>Ang Mo Kio</dd></dl></article>';
+    var route = (noAmb() || after24()) ? '' :
+      '<section class="section"><h2>Current trip ' + ACTIVE.id + '</h2><div class="card" style="font-size:17px"><dl style="display:grid;grid-template-columns:max-content 1fr;gap:8px 20px;margin:0">' +
+      '<dt class="muted">Pickup</dt><dd style="margin:0;font-weight:600">' + ACTIVE.pickup + '</dd><dt class="muted">Destination</dt><dd style="margin:0;font-weight:600">' + ACTIVE.dest + '</dd></dl>' +
+      '<p class="hint" style="margin-top:10px">Patient details are shown to the Paramedics and Care Assistant on your crew.</p></div></section>';
+    document.getElementById('content').innerHTML =
+      '<div class="row"><div class="col-main">' + vehicle + '</div><aside class="col-side stack">' +
+      '<div class="card"><h2 style="margin:0 0 4px">Driving hours this week</h2><p style="margin:0"><span class="big">36 h</span> <span class="muted">23 – 29 Nov</span></p></div>' +
+      '<div class="card"><h2>Crew on AMB-03</h2>' + crewList() + '</div></aside></div>' + route +
+      '<section class="section"><h2>Valid vehicle-class qualifications</h2><div class="table-wrap"><table><thead><tr><th>Qualification</th><th>Valid until</th><th>Status</th></tr></thead><tbody>' +
+      quals.map(function (q) { return '<tr><td>' + q[0] + '</td><td>' + q[1] + '</td><td><span class="chip ok">' + W.ICONS.check + ' Valid</span></td></tr>'; }).join('') +
+      '</tbody></table></div></section>';
+  }
+
+  function render() { if (isDriver) driver(); else medical(); }
+  render();
+
+  W.controls(isDriver ? [
+    { label: 'Simulate no ambulance assigned', pressed: noAmb(), onClick: function () { var v = !noAmb(); W.store.set('dispatch.noAmb', v); render(); return v; } }
+  ] : [
+    { label: 'Simulate 24 h after this shift ends (FR-40)', pressed: after24(), onClick: function () { var v = !after24(); W.store.set('dispatch.after24', v); render(); return v; } }
+  ]);
+})();
+</script>
+</body>
+</html>

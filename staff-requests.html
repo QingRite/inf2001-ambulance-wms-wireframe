@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Requests – WMS</title>
+<link rel="stylesheet" href="assets/wms.css">
+<style>
+  .swap-card { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 12px 0; }
+  .swap-card > div { border: 1.5px solid var(--line); border-radius: var(--r); padding: 12px; background: var(--fill-2); }
+  .swap-card .lbl { font-size: 13px; color: var(--muted); display: block; }
+  form.card { max-width: 720px; }
+  .reason { font-size: 14px; color: var(--muted); display: block; margin-top: 2px; }
+</style>
+</head>
+<body data-group="staff" data-active="requests">
+<main id="main">
+  <!-- Fig 5.3.7 Late request pending (FR-14), 5.5.1 Request swap (FR-21), 5.5.2 Swap request received (FR-22),
+       5.6.1 Record absence (FR-23), 5.6.2 Absence denied – missing dates (FR-23, FR-31). UC-05, UC-06, UC-07. -->
+  <div class="page-head">
+    <div>
+      <h1>Requests</h1>
+      <p class="sub">Track your requests, answer swap requests, ask for a swap or record an absence.</p>
+    </div>
+  </div>
+  <div id="flash"></div>
+  <div class="tabs" role="tablist" id="tabs"></div>
+  <div id="panel"></div>
+</main>
+
+<script src="assets/wms.js"></script>
+<script>
+(function () {
+  var W = WMS, me = W.currentUser();
+  var params = new URLSearchParams(location.search);
+  var tab = params.get('swap') ? 'swap' : (params.get('tab') || 'mine');
+  var colleagues = W.COLLEAGUES[me.role] || [];
+  function byId(id) { return W.MY_SHIFTS.filter(function (s) { return s.id === id; })[0]; }
+  function rejected() { return W.store.get('rejected', {}); }
+  function published0712() { return W.store.get('published0712', false); }
+  function swappable(s) {
+    var w = W.WEEKS.filter(function (x) { return x.id === s.week; })[0];
+    return s.date >= W.TODAY && !rejected()[s.id] && !(w.draft && !published0712());
+  }
+  function incoming() {
+    var v = W.store.get('incoming', null);
+    if (!v) { v = colleagues.length ? { from: colleagues[0].name, theirs: colleagues[0].shifts[0], mine: 's5', status: 'Waiting for your answer' } : null; W.store.set('incoming', v); }
+    return v;
+  }
+  function lateRequests() {
+    var l = W.store.get('lateRequests', []);
+    return l.concat([{ id: 'LR-1031', week: '2026-11-30', change: 'Available Thu 03 Dec, Night', reason: 'Childcare arrangement changed, now free that night.', status: 'Approved', sent: '2026-11-20' }]);
+  }
+  function chip(status) {
+    if (/Approved/.test(status)) return '<span class="chip ok">' + W.ICONS.check + ' ' + status + '</span>';
+    if (/Rejected|Declined/.test(status)) return '<span class="chip err">' + status + '</span>';
+    if (/Waiting for (?!your)/.test(status)) return '<span class="chip tentative">' + W.esc(status) + '</span>';
+    return '<span class="chip">' + W.ICONS.clock + ' ' + W.esc(status) + '</span>';
+  }
+
+  function renderTabs() {
+    var inc = incoming(), n = inc && inc.status === 'Waiting for your answer' ? 1 : 0;
+    var T = [['mine', 'My requests'], ['incoming', 'Swap requests for you' + (n ? ' (' + n + ')' : '')], ['swap', 'Request a swap'], ['absence', 'Record an absence']];
+    var el = document.getElementById('tabs');
+    el.innerHTML = T.map(function (t) { return '<button role="tab" aria-selected="' + (t[0] === tab) + '" data-t="' + t[0] + '">' + t[1] + '</button>'; }).join('');
+    el.querySelectorAll('[data-t]').forEach(function (b) { b.addEventListener('click', function () { tab = b.getAttribute('data-t'); document.getElementById('flash').innerHTML = ''; render(); }); });
+  }
+
+  /* ---- My requests ---- */
+  function mine() {
+    var rows = [];
+    lateRequests().forEach(function (r) {
+      rows.push('<tr><td><strong>Late availability</strong><span class="reason">' + r.id + '</span></td><td>Week of ' + W.fmtDate(r.week, { noDay: true }) + ': ' + W.esc(r.change) +
+        '<span class="reason">Reason: ' + W.esc(r.reason) + '</span></td><td>' + W.fmtDate(r.sent, { noDay: true }) + '</td><td>' + chip(r.status) + '</td></tr>');
+    });
+    W.store.get('swaps', []).forEach(function (x) {
+      rows.push('<tr><td><strong>Shift swap</strong></td><td>Your ' + W.esc(W.shiftLabel(byId(x.myShift))) + '<br>for ' + W.esc(x.colleague) + "'s " + W.esc(W.shiftLabel(x.theirs)) +
+        '</td><td>' + W.fmtDate(x.sent, { noDay: true }) + '</td><td>' + chip(x.status) + '</td></tr>');
+    });
+    W.store.get('absences', []).concat([{ cat: 'Annual Leave', start: '2026-12-21', end: '2026-12-22', desc: 'Family trip', sent: '2026-11-02', status: 'Recorded' }]).forEach(function (a) {
+      rows.push('<tr><td><strong>Absence</strong></td><td>' + W.esc(a.cat) + ', ' + W.fmtDate(a.start, { noDay: true }) + (a.end !== a.start ? ' – ' + W.fmtDate(a.end, { noDay: true }) : '') +
+        (a.desc ? '<span class="reason">' + W.esc(a.desc) + '</span>' : '') + '</td><td>' + W.fmtDate(a.sent, { noDay: true }) + '</td><td>' + chip(a.status) + '</td></tr>');
+    });
+    return '<div class="table-wrap"><table><thead><tr><th>Request</th><th>Details</th><th>Sent</th><th>Status</th></tr></thead><tbody>' + rows.join('') + '</tbody></table></div>';
+  }
+
+  /* ---- Incoming swap (FR-22: receiver accepts before it goes to the Manager) ---- */
+  function incomingPanel() {
+    var inc = incoming();
+    if (!inc) return '<p class="muted">No swap requests for you.</p>';
+    var mineS = byId(inc.mine), open = inc.status === 'Waiting for your answer';
+    return '<div class="card" style="max-width:760px"><h2 style="margin-bottom:4px">' + W.esc(inc.from) + ' wants to swap shifts</h2><p class="muted" style="margin:0">' + W.esc(me.role) + ' · sent 45 min ago</p>' +
+      '<div class="swap-card"><div><span class="lbl">You give</span><strong>' + W.esc(W.shiftLabel(mineS)) + '</strong></div>' +
+      '<div><span class="lbl">You get</span><strong>' + W.esc(W.shiftLabel(inc.theirs)) + '</strong></div></div>' +
+      '<p class="hint" style="margin-bottom:12px">If you accept, the request goes to your Manager. Your shifts change only after your Manager approves.</p>' +
+      (open ? '<div class="actions"><button class="btn" id="decline">Decline</button><button class="btn primary" id="accept">Accept</button></div>'
+            : '<p>' + chip(inc.status) + '</p>') + '</div>';
+  }
+  function bindIncoming() {
+    var a = document.getElementById('accept'), d = document.getElementById('decline'); if (!a) return;
+    a.addEventListener('click', function () {
+      var inc = incoming(); inc.status = 'Accepted – waiting for Manager approval'; W.store.set('incoming', inc);
+      W.notify(inc.from + ' and ' + me.name + ' agreed to swap ' + W.fmtDate(byId(inc.mine).date) + ' and ' + W.fmtDate(inc.theirs.date) + '. Approval needed.', 'rachel.lim');
+      flash('Swap accepted. It has been sent to your Manager for approval.'); render();
+    });
+    d.addEventListener('click', function () {
+      W.modal({ title: 'Decline this swap?', html: '<p>' + W.esc(incoming().from) + ' will be told you declined. Your shift stays the same.</p>',
+        actions: [{ label: 'Cancel' }, { label: 'Decline swap', primary: true, danger: true, onClick: function () {
+          var inc = incoming(); inc.status = 'Declined'; W.store.set('incoming', inc); flash('Swap declined. Your shift is unchanged.'); render();
+        } }] });
+    });
+  }
+
+  /* ---- Request a swap (FR-21: same role, eligible shift) ---- */
+  function swapPanel() {
+    var mineOpts = W.MY_SHIFTS.filter(swappable).map(function (s) { return '<option value="' + s.id + '">' + W.esc(W.shiftLabel(s)) + '</option>'; }).join('');
+    var colOpts = colleagues.map(function (c, i) { return '<option value="' + i + '">' + W.esc(c.name) + ' (' + me.role + ')</option>'; }).join('');
+    return '<form class="card" id="swap-form" novalidate><h2>Request a swap</h2><div class="form-summary"></div>' +
+      '<div class="field"><label for="my-shift">Your shift<span class="req" aria-hidden="true">*</span></label><select id="my-shift"><option value="">Select a shift</option>' + mineOpts + '</select></div>' +
+      '<div class="field"><label for="colleague">Swap with<span class="req" aria-hidden="true">*</span></label><select id="colleague"><option value="">Select a colleague</option>' + colOpts + '</select>' +
+      '<p class="hint">Only colleagues with your role (' + W.esc(me.role) + ') are listed.</p></div>' +
+      '<div class="field"><label for="their-shift">Their shift<span class="req" aria-hidden="true">*</span></label><select id="their-shift" disabled><option value="">Select a colleague first</option></select>' +
+      '<p class="hint">Only shifts on days you are not already working are listed.</p></div>' +
+      '<div class="actions"><a class="btn" href="staff-schedule.html">Cancel</a><button class="btn primary" type="submit">Send swap request</button></div></form>';
+  }
+  function bindSwap() {
+    var f = document.getElementById('swap-form'); if (!f) return;
+    var my = f.querySelector('#my-shift'), col = f.querySelector('#colleague'), th = f.querySelector('#their-shift');
+    if (params.get('swap')) my.value = params.get('swap');
+    col.addEventListener('change', function () {
+      var c = colleagues[col.value];
+      if (!c) { th.disabled = true; th.innerHTML = '<option value="">Select a colleague first</option>'; return; }
+      var myDates = W.MY_SHIFTS.map(function (s) { return s.date; });
+      var ok = c.shifts.filter(function (s) { return myDates.indexOf(s.date) < 0 && s.date >= W.TODAY; });
+      th.disabled = false;
+      th.innerHTML = '<option value="">Select their shift</option>' + ok.map(function (s) { return '<option value="' + s.id + '">' + W.esc(W.shiftLabel(s)) + '</option>'; }).join('');
+    });
+    f.addEventListener('submit', function (e) {
+      e.preventDefault(); W.clearErrors(f); var bad = false;
+      if (!my.value) { W.setError(my, 'Select the shift you want to give away.'); bad = true; }
+      if (!col.value) { W.setError(col, 'Select a colleague to swap with.'); bad = true; }
+      else if (!th.value) { W.setError(th, 'Select the shift you want in return.'); bad = true; }
+      if (bad) { f.querySelector('[aria-invalid]').focus(); return; }
+      var c = colleagues[col.value], theirs = c.shifts.filter(function (s) { return s.id === th.value; })[0];
+      var list = W.store.get('swaps', []);
+      list.unshift({ myShift: my.value, colleague: c.name, theirs: theirs, status: 'Waiting for ' + c.name + ' to accept', sent: W.TODAY });
+      W.store.set('swaps', list);
+      tab = 'mine'; render();
+      flash('Swap request sent to ' + c.name + '. They need to accept it before it goes to your Manager.');
+    });
+  }
+
+  /* ---- Record an absence (FR-23) ---- */
+  function absencePanel() {
+    return '<form class="card" id="abs-form" novalidate><h2>Record an absence</h2><p class="hint" style="margin:-6px 0 14px">Fields marked * are required.</p><div class="form-summary"></div>' +
+      '<div class="field"><label for="cat">Absence category<span class="req" aria-hidden="true">*</span></label><select id="cat"><option value="">Select a category</option><option>Medical Leave</option><option>Emergency Leave</option><option>Annual Leave</option><option>Other</option></select></div>' +
+      '<div class="grid-2"><div class="field"><label for="start">Start date<span class="req" aria-hidden="true">*</span></label><input type="date" id="start" min="' + W.TODAY + '"></div>' +
+      '<div class="field"><label for="end">End date<span class="req" aria-hidden="true">*</span></label><input type="date" id="end" min="' + W.TODAY + '"></div></div>' +
+      '<div class="field"><label for="desc">Description</label><textarea id="desc" placeholder="Optional. Only your Manager can see this."></textarea></div>' +
+      '<div class="field"><label for="mc">Medical certificate</label><input type="file" id="mc" accept=".pdf,.jpg,.png"><p class="hint">PDF, JPG or PNG. Only your Manager can see it.</p></div>' +
+      '<div class="actions"><a class="btn" href="staff-schedule.html">Cancel</a><button class="btn primary" type="submit">Submit absence</button></div></form>';
+  }
+  function bindAbsence() {
+    var f = document.getElementById('abs-form'); if (!f) return;
+    f.addEventListener('submit', function (e) {
+      e.preventDefault(); W.clearErrors(f);
+      var cat = f.querySelector('#cat'), st = f.querySelector('#start'), en = f.querySelector('#end');
+      var missing = [];
+      if (!cat.value) W.setError(cat, 'Select an absence category.');
+      if (!st.value) { W.setError(st, 'Enter a start date.'); missing.push('start date'); }
+      if (!en.value) { W.setError(en, 'Enter an end date.'); missing.push('end date'); }
+      if (st.value && en.value && en.value < st.value) W.setError(en, 'End date must be on or after the start date.');
+      if (f.querySelector('[aria-invalid]')) {
+        W.summary(f, missing.length ? 'Submission denied – missing ' + missing.join(' and ') + '. Fix the fields marked below.' : 'Submission denied. Fix the fields marked below.');
+        f.querySelector('[aria-invalid]').focus(); return;
+      }
+      var hit = W.MY_SHIFTS.filter(function (s) { return s.date >= st.value && s.date <= en.value; });
+      var list = W.store.get('absences', []);
+      list.unshift({ cat: cat.value, start: st.value, end: en.value, desc: f.querySelector('#desc').value.trim(), sent: W.TODAY, status: 'Recorded', file: f.querySelector('#mc').files.length > 0 });
+      W.store.set('absences', list);
+      W.notify(me.name + ' recorded ' + cat.value + ' from ' + W.fmtDate(st.value) + ' to ' + W.fmtDate(en.value) + '.' + (hit.length ? ' ' + hit.length + ' assigned shift(s) need a stand-in.' : ''), 'rachel.lim');
+      W.modal({ title: 'Absence recorded', html: '<p>' + W.esc(cat.value) + ', ' + W.fmtDate(st.value, { noDay: true }) + ' – ' + W.fmtDate(en.value, { noDay: true, year: true }) + '.</p>' +
+        '<p class="muted">' + (hit.length ? 'This affects ' + hit.length + ' of your assigned shifts. Your Manager has been notified and will arrange a stand-in.' : 'Your Manager has been notified.') + '</p>',
+        actions: [{ label: 'OK', primary: true, onClick: function () { tab = 'mine'; render(); } }] });
+    });
+  }
+
+  function flash(msg) { document.getElementById('flash').innerHTML = '<div class="banner ok" role="status">' + W.ICONS.check + '<p>' + W.esc(msg) + '</p></div>'; }
+  function render() {
+    renderTabs();
+    var p = document.getElementById('panel');
+    p.innerHTML = tab === 'mine' ? mine() : tab === 'incoming' ? incomingPanel() : tab === 'swap' ? swapPanel() : absencePanel();
+    bindIncoming(); bindSwap(); bindAbsence();
+  }
+  render();
+
+  W.controls([
+    { label: 'Show absence "missing dates" error', onClick: function () {
+        tab = 'absence'; render(); var f = document.getElementById('abs-form'); f.querySelector('#cat').value = 'Medical Leave'; f.requestSubmit ? f.requestSubmit() : f.querySelector('[type=submit]').click();
+      } },
+    { label: 'Reset incoming swap request', onClick: function () { W.store.set('incoming', null); tab = 'incoming'; render(); } }
+  ]);
+})();
+</script>
+</body>
+</html>

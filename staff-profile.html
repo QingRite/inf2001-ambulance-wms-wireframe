@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Profile – WMS</title>
+<link rel="stylesheet" href="assets/wms.css">
+<style>
+  .details { display: grid; grid-template-columns: minmax(140px, max-content) 1fr; gap: 10px 24px; margin: 0; }
+  .details dt { color: var(--muted); }
+  .details dd { margin: 0; font-weight: 600; }
+  .avatar { width: 72px; height: 72px; border-radius: 50%; flex: none; }
+  .who-head { display: flex; gap: 16px; align-items: center; margin-bottom: 16px; }
+  @media (max-width: 560px) { .details { grid-template-columns: 1fr; gap: 0; } .details dd { margin-bottom: 10px; } }
+</style>
+</head>
+<body data-group="staff" data-active="profile">
+<main id="main">
+  <!-- Fig 5.9.1 My Profile (FR-38), 5.9.2 Access denied – restricted record (FR-38, FR-41). -->
+  <h1>Profile</h1>
+  <p class="sub">Your own records. Only you and your Manager can see your contact details and address.</p>
+  <div id="flash"></div>
+  <div class="row">
+    <section class="col-main card" aria-labelledby="me-h">
+      <div class="who-head"><div class="ph-img avatar" role="img" aria-label="Profile photo placeholder"></div>
+        <div><h2 id="me-h" style="margin:0"></h2><p class="muted" style="margin:0" id="me-role"></p></div></div>
+      <dl class="details" id="details"></dl>
+      <hr class="hr">
+      <p class="hint" style="margin:0">To change these details, contact your Manager.</p>
+    </section>
+    <aside class="col-side card" aria-labelledby="q-h">
+      <h2 id="q-h">Qualifications</h2>
+      <ul id="quals" style="margin:0;padding-left:18px"></ul>
+    </aside>
+  </div>
+
+  <section class="section" aria-labelledby="dir-h">
+    <h2 id="dir-h">Team directory</h2>
+    <p class="hint" style="margin:-6px 0 10px">You can see colleagues' names and roles. Their shifts are on My Schedule; crew lists are on Dispatch.</p>
+    <div class="table-wrap"><table><thead><tr><th>Name</th><th>Role</th><th>Record</th></tr></thead><tbody id="dir"></tbody></table></div>
+  </section>
+</main>
+
+<script src="assets/wms.js"></script>
+<script>
+(function () {
+  var W = WMS, me = W.currentUser();
+  document.getElementById('me-h').textContent = me.name;
+  document.getElementById('me-role').textContent = me.role + ' · ' + me.id;
+  var rows = [['Staff ID', me.id], ['Role', me.role], ['Base', me.zone], ['Mobile', me.phone], ['Email', me.email], ['Home address', me.address]];
+  document.getElementById('details').innerHTML = rows.map(function (r) { return '<dt>' + r[0] + '</dt><dd>' + W.esc(r[1]) + '</dd>'; }).join('');
+  var Q = {
+    'Paramedic': ['Advanced Life Support – valid to 14 Feb 2028', 'Paramedic registration – valid to 31 Dec 2027'],
+    'Care Assistant': ['Basic Cardiac Life Support – valid to 09 Sep 2027', 'Patient handling – valid to 20 Apr 2028'],
+    'Driver': ['Class 3 – valid to 12 Mar 2028', 'Class 4 – valid to 05 Aug 2027', 'Emergency vehicle operations – valid to 30 Jun 2027']
+  };
+  document.getElementById('quals').innerHTML = (Q[me.role] || []).map(function (q) { return '<li style="margin-bottom:6px">' + q + '</li>'; }).join('');
+
+  var team = [['Daniel Ho', 'Paramedic'], ['Siti Rahim', 'Paramedic'], ['Nur Aisyah', 'Paramedic'], ['Ravi Kumar', 'Care Assistant'], ['Jun Wei Lee', 'Care Assistant'], ['Marcus Tan', 'Driver']]
+    .filter(function (p) { return p[0] !== me.name; });
+  var dir = document.getElementById('dir');
+  dir.innerHTML = team.map(function (p) { return '<tr><td>' + p[0] + '</td><td>' + p[1] + '</td><td><button class="btn small" data-n="' + p[0] + '">View record</button></td></tr>'; }).join('');
+  dir.querySelectorAll('[data-n]').forEach(function (b) {
+    b.addEventListener('click', function () { denied(b.getAttribute('data-n')); });
+  });
+
+  /* FR-38 / FR-41: staff may open only their own personal record */
+  function denied(name, detail) {
+    var f = document.getElementById('flash');
+    f.innerHTML = '<div class="banner err" role="alert">' + W.ICONS.alert + '<p><strong>You do not have access to this record.</strong> ' +
+      W.esc(detail || (name + "'s personal details are restricted. Staff can view only their own records; confidential details are visible to Managers only.")) + '</p></div>';
+    f.scrollIntoView({ block: 'start' }); f.querySelector('.banner').setAttribute('tabindex', '-1'); f.querySelector('.banner').focus();
+  }
+
+  W.controls([
+    { label: "Try to open another ambulance's dispatch", onClick: function () { denied('', 'Dispatch details are shown only for the ambulance you are assigned to (AMB-03). AMB-07 is not your ambulance.'); } }
+  ]);
+})();
+</script>
+</body>
+</html>

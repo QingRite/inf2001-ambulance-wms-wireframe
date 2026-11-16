@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Availability – WMS</title>
+<link rel="stylesheet" href="assets/wms.css">
+<style>
+  table.avail { table-layout: fixed; min-width: 860px; }
+  .avail th, .avail td { text-align: center; }
+  .avail thead th:first-child { width: 150px; }
+  .avail th[scope="row"] { text-align: left; }
+  .slot { width: 100%; min-height: 48px; border: 1.5px solid var(--line); border-radius: var(--r); background: #fff; font: inherit; font-size: 14px; color: var(--muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+  .slot[aria-pressed="true"] { background: var(--ok-bg); border: 2px solid var(--ok-line); color: var(--ok-ink); font-weight: 700; }
+  .slot.off[aria-pressed="true"] { background: var(--fill); border: 2px solid var(--ink); color: var(--ink); }
+  .slot:disabled { cursor: not-allowed; opacity: .65; }
+  td.bad { background: var(--err-bg); }
+  td.bad .slot { border-color: var(--err); }
+  .cell-err { color: var(--err); font-size: 12px; font-weight: 600; margin-top: 4px; text-align: left; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+  .status-line { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin: 12px 0; }
+  fieldset { border: none; padding: 0; margin: 0 0 16px; }
+  legend { font-weight: 600; margin-bottom: 6px; padding: 0; }
+</style>
+</head>
+<body data-group="staff" data-active="availability">
+<main id="main">
+  <!-- Fig 5.3.1 Availability (FR-12), 5.3.2 Copy pattern (FR-30), 5.3.3 Validation errors (FR-31), 5.3.4 Submitted,
+       5.3.5 Week locked + late request (FR-13, FR-14), 5.3.6 Justification too short, 5.3.10 Preferences (FR-17).
+       UC-01, UC-02. NFR-04: standard week in 3 actions (Availability tab > Use standard pattern > Submit). -->
+  <div class="page-head">
+    <div>
+      <h1>Availability</h1>
+      <p class="sub">Set when you can work for this week and the next five weeks.</p>
+    </div>
+  </div>
+  <div id="flash"></div>
+  <div class="tabs" role="tablist" id="week-tabs" aria-label="Weeks"></div>
+  <div id="deadline"></div>
+
+  <section aria-labelledby="grid-h">
+    <h2 id="grid-h" class="sr-only">Availability grid</h2>
+    <div class="toolbar" id="toolbar"></div>
+    <div class="table-wrap"><table class="avail" id="grid"></table></div>
+    <div class="status-line" id="status-line"></div>
+    <div class="form-summary" id="summary"></div>
+    <div class="actions" id="submit-bar"></div>
+  </section>
+
+  <section class="section card" aria-labelledby="pref-h">
+    <h2 id="pref-h">Shift and duty preferences</h2>
+    <p class="hint" style="margin:-6px 0 14px" id="pref-week"></p>
+    <form id="pref-form" novalidate>
+      <fieldset>
+        <legend>Preferred shift</legend>
+        <label class="choice"><input type="radio" name="slot" value="Day"> Day (08:00–20:00)</label>
+        <label class="choice"><input type="radio" name="slot" value="Night"> Night (20:00–08:00)</label>
+        <label class="choice"><input type="radio" name="slot" value="No preference" checked> No preference</label>
+      </fieldset>
+      <div class="grid-2">
+        <div class="field">
+          <label for="duty">Preferred duty</label>
+          <select id="duty">
+            <option>No preference</option>
+            <option>Emergency response</option>
+            <option>Non-emergency patient transfer</option>
+            <option>Standby</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="pref-notes">Notes for your Manager (optional)</label>
+          <input type="text" id="pref-notes" placeholder="e.g. Prefer AMB-03 crew">
+        </div>
+      </div>
+      <div class="actions"><span class="hint" id="pref-saved"></span><button class="btn primary" type="submit">Save preferences</button></div>
+    </form>
+  </section>
+</main>
+
+<script src="assets/wms.js"></script>
+<script>
+(function () {
+  var W = WMS, me = W.currentUser();
+  var WEEKS = ['2026-11-23', '2026-11-30', '2026-12-07', '2026-12-14', '2026-12-21', '2026-12-28'].map(function (id) {
+    return { id: id, cutoff: W.addDays(id, -11) };   // FR-13: Thursday 00:00 SGT that begins planning
+  });
+  var PATTERN = { name: 'Weekdays, day shift', desc: 'Mon–Fri Day available, Sat–Sun preferred off-days' };
+  function patternWeek(id) {
+    var s = {}; for (var i = 0; i < 7; i++) { var d = W.addDays(id, i); s[d] = i < 5 ? { Day: true, Night: false, off: false } : { Day: false, Night: false, off: true }; } return s;
+  }
+  function emptyWeek(id) { var s = {}; for (var i = 0; i < 7; i++) s[W.addDays(id, i)] = { Day: false, Night: false, off: false }; return s; }
+
+  var data = W.store.get('avail', null);
+  if (!data) {
+    data = {};
+    WEEKS.forEach(function (w, i) { data[w.id] = i < 3 ? { slots: patternWeek(w.id), submitted: '2026-11-' + (10 + i * 5) } : { slots: emptyWeek(w.id), submitted: null }; });
+    data['2026-11-30'].slots['2026-12-03'] = { Day: false, Night: true, off: false };
+    W.store.set('avail', data);
+  }
+  function save() { W.store.set('avail', data); }
+  var sel = W.store.get('avail.week', '2026-12-14');
+  function simLocked() { return W.store.get('avail.simLocked', {}); }
+  function isLocked(w) { return w.cutoff <= W.TODAY || !!simLocked()[w.id]; }
+  function wk(id) { return WEEKS.filter(function (w) { return w.id === id; })[0]; }
+  function shortWeek(id) { return 'week of ' + W.fmtDate(id, { noDay: true }); }
+  var errors = {};
+
+  function renderTabs() {
+    var el = document.getElementById('week-tabs');
+    el.innerHTML = WEEKS.map(function (w) {
+      var st = isLocked(w) ? 'Closed' : 'Closes Thu ' + W.fmtDate(w.cutoff, { noDay: true });
+      return '<button role="tab" aria-selected="' + (w.id === sel) + '" data-w="' + w.id + '">' + W.fmtDate(w.id, { noDay: true }) + ' – ' + W.fmtDate(W.addDays(w.id, 6), { noDay: true }) +
+        '<span class="small">' + st + '</span></button>';
+    }).join('');
+    el.querySelectorAll('[data-w]').forEach(function (b) {
+      b.addEventListener('click', function () { sel = b.getAttribute('data-w'); W.store.set('avail.week', sel); errors = {}; document.getElementById('flash').innerHTML = ''; render(); });
+    });
+  }
+
+  function renderDeadline() {
+    var w = wk(sel), el = document.getElementById('deadline');
+    var cut = 'Thu ' + W.fmtDate(w.cutoff, { noDay: true, year: true }) + ', 00:00 (SGT)';
+    if (isLocked(w)) {
+      el.innerHTML = '<div class="banner">' + W.ICONS.lock + '<div><p><strong>The ' + shortWeek(w.id) + ' closed ' + cut + '.</strong> Your availability is locked. To change it, send a late request with a reason.</p>' +
+        '<p style="margin-top:10px"><button class="btn" id="late-btn" type="button">Request late change</button></p></div></div>';
+      document.getElementById('late-btn').addEventListener('click', lateForm);
+    } else {
+      el.innerHTML = '<div class="banner">' + W.ICONS.clock + '<p><strong>The ' + shortWeek(w.id) + ' closes ' + cut + '.</strong> After that you will need to send a late request.</p></div>';
+    }
+  }
+
+  function renderToolbar() {
+    var w = wk(sel), el = document.getElementById('toolbar');
+    if (isLocked(w)) { el.innerHTML = ''; return; }
+    el.innerHTML = '<button class="btn" type="button" id="use-pattern">Use standard pattern</button>' +
+      '<button class="btn" type="button" id="copy-pattern">Copy pattern to other weeks…</button>' +
+      '<button class="btn" type="button" id="clear">Clear week</button>';
+    document.getElementById('use-pattern').addEventListener('click', function () { data[sel].slots = patternWeek(sel); errors = {}; save(); render(); W.toast('Standard pattern applied: ' + PATTERN.desc + '.'); });
+    document.getElementById('clear').addEventListener('click', function () { data[sel].slots = emptyWeek(sel); errors = {}; save(); render(); });
+    document.getElementById('copy-pattern').addEventListener('click', copyForm);
+  }
+
+  function renderGrid() {
+    var w = wk(sel), locked = isLocked(w), s = data[sel].slots;
+    var head = '<thead><tr><th scope="col"><span class="sr-only">Slot</span></th>';
+    for (var i = 0; i < 7; i++) head += '<th scope="col">' + W.fmtDate(W.addDays(sel, i)) + '</th>';
+    head += '</tr></thead>';
+    var rows = [['Day', 'Day 08:00–20:00'], ['Night', 'Night 20:00–08:00'], ['off', 'Preferred off-day']].map(function (r) {
+      var tr = '<tr><th scope="row">' + r[1] + '</th>';
+      for (var i = 0; i < 7; i++) {
+        var d = W.addDays(sel, i), on = s[d][r[0]], bad = errors[d] && r[0] === 'off';
+        var label = r[0] === 'off' ? (on ? 'Off' : '–') : (on ? W.ICONS.check + ' Available' : 'Not available');
+        tr += '<td class="' + (bad ? 'bad' : '') + '"><button type="button" class="slot' + (r[0] === 'off' ? ' off' : '') + '" aria-pressed="' + on + '" data-d="' + d + '" data-k="' + r[0] + '"' +
+          ' aria-label="' + W.fmtDate(d) + ' ' + r[1] + ': ' + (on ? (r[0] === 'off' ? 'off-day' : 'available') : 'not set') + '"' + (locked ? ' disabled' : '') + '>' + label + '</button>' +
+          (bad ? '<div class="cell-err" id="err-' + d + '">' + W.ICONS.alert.replace('width="18" height="18"', 'width="12" height="12"') + ' ' + errors[d] + '</div>' : '') + '</td>';
+      }
+      return tr + '</tr>';
+    }).join('');
+    var g = document.getElementById('grid'); g.innerHTML = head + '<tbody>' + rows + '</tbody>';
+    g.querySelectorAll('.slot').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var d = b.getAttribute('data-d'), k = b.getAttribute('data-k');
+        s[d][k] = !s[d][k]; delete errors[d]; save(); renderGrid(); renderStatus();
+        var again = document.querySelector('.slot[data-d="' + d + '"][data-k="' + k + '"]'); if (again) again.focus();
+      });
+    });
+  }
+
+  function counts() {
+    var s = data[sel].slots, a = 0, o = 0;
+    Object.keys(s).forEach(function (d) { if (s[d].Day) a++; if (s[d].Night) a++; if (s[d].off) o++; });
+    return { a: a, o: o };
+  }
+  function renderStatus() {
+    var w = wk(sel), c = counts(), sub = data[sel].submitted;
+    document.getElementById('status-line').innerHTML =
+      (sub ? '<span class="chip">' + W.ICONS.check + ' Submitted ' + W.fmtDate(sub, { noDay: true }) + '</span>' : '<span class="chip muted">Not submitted</span>') +
+      '<span class="muted small">' + c.a + ' slots available · ' + c.o + ' preferred off-days</span>';
+    var bar = document.getElementById('submit-bar');
+    if (isLocked(w)) { bar.innerHTML = ''; return; }
+    bar.innerHTML = '<span class="hint">Standard week: Use standard pattern, then Submit.</span><button class="btn primary" type="button" id="submit">' + (sub ? 'Resubmit availability' : 'Submit availability') + '</button>';
+    document.getElementById('submit').addEventListener('click', submit);
+  }
+
+  /* FR-31: name each invalid day and the fix */
+  function submit() {
+    var s = data[sel].slots, sec = document.getElementById('grid').closest('section');
+    errors = {}; W.clearErrors(sec);
+    var c = counts();
+    Object.keys(s).forEach(function (d) { if (s[d].off && (s[d].Day || s[d].Night)) errors[d] = 'Off-day clashes with an available slot. Remove one.'; });
+    var bad = Object.keys(errors);
+    if (bad.length || c.a === 0) {
+      renderGrid();
+      var msg = [];
+      if (bad.length) msg.push(bad.length + (bad.length === 1 ? ' day needs' : ' days need') + ' fixing: ' + bad.map(function (d) { return W.fmtDate(d); }).join(', ') + '. Each one is marked in the grid.');
+      if (c.a === 0) msg.push('Select at least one available Day or Night slot for this week.');
+      W.summary(sec, 'Availability not submitted. ' + msg.join(' '));
+      var first = document.querySelector('td.bad .slot') || document.querySelector('.slot'); if (first) first.focus();
+      return;
+    }
+    data[sel].submitted = W.TODAY; save(); render();
+    W.modal({
+      title: 'Availability submitted!',
+      html: '<p>Your availability for the ' + shortWeek(sel) + ' (' + W.fmtDate(sel, { noDay: true }) + ' – ' + W.fmtDate(W.addDays(sel, 6), { noDay: true, year: true }) + ') has been saved.</p>' +
+        '<p class="muted">' + c.a + ' slots available, ' + c.o + ' preferred off-days. You can edit it until Thu ' + W.fmtDate(wk(sel).cutoff, { noDay: true }) + ', 00:00 (SGT).</p>',
+      actions: [{ label: 'OK', primary: true }]
+    });
+  }
+
+  /* FR-30: copy saved pattern into future weeks inside the window */
+  function copyForm() {
+    var list = WEEKS.filter(function (w) { return w.id !== sel && w.id > W.TODAY; }).map(function (w) {
+      var l = isLocked(w);
+      return '<label class="choice"><input type="checkbox" value="' + w.id + '"' + (l ? ' disabled' : '') + '> ' + W.fmtDate(w.id, { noDay: true }) + ' – ' + W.fmtDate(W.addDays(w.id, 6), { noDay: true }) +
+        (l ? ' <span class="chip muted">Closed</span>' : '') + '</label>';
+    }).join('');
+    W.modal({
+      title: 'Copy standard pattern',
+      html: '<div class="field"><span class="label">Saved pattern</span><p style="margin:0"><strong>' + PATTERN.name + '</strong><br><span class="muted">' + PATTERN.desc + '</span></p></div>' +
+        '<fieldset class="field" id="copy-weeks"><legend>Copy into these weeks</legend>' + list + '<p class="hint">Only weeks in your five-week window are listed. Closed weeks need a late request.</p></fieldset>',
+      actions: [
+        { label: 'Cancel' },
+        { label: 'Copy and submit', primary: true, onClick: function (o) {
+            var picked = Array.prototype.map.call(o.querySelectorAll('#copy-weeks input:checked'), function (i) { return i.value; });
+            W.clearErrors(o);
+            if (!picked.length) { W.setError(o.querySelector('#copy-weeks input:not(:disabled)'), 'Select at least one week.'); return true; }
+            picked.forEach(function (id) { data[id] = { slots: patternWeek(id), submitted: W.TODAY }; });
+            save(); render();
+            W.toast('Pattern copied to ' + picked.length + (picked.length === 1 ? ' week' : ' weeks') + ' and submitted.');
+          } }
+      ]
+    });
+  }
+
+  /* FR-14: late request after cutoff, justification of at least 10 non-space characters */
+  function lateForm() {
+    var w = wk(sel);
+    W.modal({
+      title: 'Request late change',
+      html: '<p class="muted" style="margin:0 0 12px">' + W.esc('The ' + shortWeek(w.id) + ' closed Thu ' + W.fmtDate(w.cutoff, { noDay: true }) + ', 00:00 (SGT). Your Manager will approve or reject this request.') + '</p>' +
+        '<div class="field"><label for="change">What do you need to change?<span class="req" aria-hidden="true">*</span></label><textarea id="change" placeholder="e.g. Not available Wed 09 Dec, Day"></textarea></div>' +
+        '<div class="field"><label for="just">Justification<span class="req" aria-hidden="true">*</span></label><textarea id="just"></textarea>' +
+        '<p class="hint">At least 10 characters, not counting spaces. <span id="jc">0</span>/10</p></div>',
+      onOpen: function (o) {
+        var j = o.querySelector('#just'), c = o.querySelector('#jc');
+        j.addEventListener('input', function () { c.textContent = W.nonWs(j.value); });
+      },
+      actions: [
+        { label: 'Cancel' },
+        { label: 'Send request', primary: true, onClick: function (o) {
+            var ch = o.querySelector('#change'), j = o.querySelector('#just'); W.clearErrors(o);
+            var bad = false;
+            if (!ch.value.trim()) { W.setError(ch, 'Describe the change you need.'); bad = true; }
+            if (W.nonWs(j.value) < 10) { W.setError(j, 'Enter at least 10 characters (spaces not counted).'); bad = true; }
+            if (bad) { o.querySelector('[aria-invalid]').focus(); return true; }
+            var list = W.store.get('lateRequests', []);
+            list.unshift({ id: 'LR-' + (1040 + list.length + 1), week: w.id, change: ch.value.trim(), reason: j.value.trim(), status: 'Pending Manager approval', sent: W.TODAY, staff: me.name });
+            W.store.set('lateRequests', list);
+            W.notify(me.name + ' submitted a late availability request for the ' + shortWeek(w.id) + '.', 'rachel.lim');
+            document.getElementById('flash').innerHTML = '<div class="banner ok" role="status">' + W.ICONS.check +
+              '<p><strong>Late request sent – pending Manager approval.</strong> Your Manager has been notified by email and dashboard alert. <a href="staff-requests.html">View in Requests</a></p></div>';
+          } }
+      ]
+    });
+  }
+
+  /* FR-17: record and replace preferences for the selected week */
+  function renderPrefs() {
+    var p = W.store.get('prefs', {})[sel], f = document.getElementById('pref-form');
+    document.getElementById('pref-week').textContent = 'For the ' + shortWeek(sel) + '. Saving replaces any earlier preferences for this week.';
+    f.querySelectorAll('input[name="slot"]').forEach(function (r) { r.checked = r.value === (p ? p.slot : 'No preference'); });
+    document.getElementById('duty').value = p ? p.duty : 'No preference';
+    document.getElementById('pref-notes').value = p ? p.notes : '';
+    document.getElementById('pref-saved').textContent = p ? 'Last saved ' + W.fmtDate(p.saved, { noDay: true }) : 'Not saved yet';
+  }
+  document.getElementById('pref-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var all = W.store.get('prefs', {}), had = !!all[sel];
+    all[sel] = { slot: this.querySelector('input[name="slot"]:checked').value, duty: document.getElementById('duty').value, notes: document.getElementById('pref-notes').value.trim(), saved: W.TODAY };
+    W.store.set('prefs', all); renderPrefs();
+    W.toast(had ? 'Preferences updated. Your earlier preferences for this week were replaced.' : 'Preferences saved for the ' + shortWeek(sel) + '.');
+  });
+
+  function render() { renderTabs(); renderDeadline(); renderToolbar(); renderGrid(); renderStatus(); renderPrefs(); }
+  render();
+
+  W.controls([
+    { label: 'Simulate cutoff passed for the selected week', pressed: !!simLocked()[sel], onClick: function () {
+        var m = simLocked(); if (m[sel]) delete m[sel]; else m[sel] = true; W.store.set('avail.simLocked', m); errors = {}; render(); return !!m[sel];
+      } },
+    { label: 'Show validation errors (adds a clash on Wed)', onClick: function () {
+        var w = wk(sel); if (isLocked(w)) { W.toast('Pick an open week first.'); return; }
+        var d = W.addDays(sel, 2); data[sel].slots[d] = { Day: true, Night: false, off: true }; save(); renderGrid(); renderStatus(); submit();
+      } }
+  ]);
+})();
+</script>
+</body>
+</html>

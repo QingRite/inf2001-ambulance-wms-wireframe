@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Session expired – WMS</title>
+<link rel="stylesheet" href="assets/wms.css">
+<style>
+  .wrap { min-height: 80vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .box { max-width: 440px; width: 100%; border: 2px solid var(--ink); border-radius: 8px; padding: 28px; text-align: center; }
+  .box .logo { display: inline-block; margin-bottom: 16px; }
+  .box .ic { display: inline-flex; width: 56px; height: 56px; border: 2px solid var(--ink); border-radius: 50%; align-items: center; justify-content: center; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+<main id="main" class="wrap">
+  <!-- NFR-11: inactive mobile session ends after 15 minutes -->
+  <div class="box">
+    <span class="logo">WMS</span><br>
+    <span class="ic" id="ic"></span>
+    <h1>Session expired</h1>
+    <p class="sub">You were inactive for 15 minutes, so you have been logged out to protect patient and staff data.</p>
+    <a class="btn primary" href="index.html" style="width:100%">Log in again</a>
+  </div>
+</main>
+<script src="assets/wms.js"></script>
+<script>
+  document.getElementById('ic').innerHTML = WMS.ICONS.lock;
+  WMS.logout();
+</script>
+</body>
+</html>
