@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Allocation – WMS</title>
+<link rel="stylesheet" href="assets/wms.css">
+<style>
+  .slots { border-collapse: separate; border-spacing: 6px; width: 100%; min-width: 760px; }
+  .slots th, .slots td { border: none; padding: 0; background: none; text-align: center; font-size: 13px; }
+  .slots th[scope="row"] { text-align: left; width: 90px; }
+  .slotbtn { width: 100%; min-height: 52px; border: 1.5px solid var(--line); border-radius: var(--r); background: #fff; font: inherit; font-size: 13px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--ink); }
+  .slotbtn.short { border: 2px solid var(--err); color: var(--err); font-weight: 600; }
+  .slotbtn[aria-pressed="true"] { outline: 3px solid var(--ink); outline-offset: 1px; }
+  .boards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+  .board { border: 1.5px solid var(--line); border-radius: var(--r); padding: 10px; }
+  .board.flag { border: 2px solid var(--err); }
+  .board h3 { display: flex; justify-content: space-between; align-items: center; margin: 0 0 8px; font-size: 15px; gap: 6px; }
+  .seat { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+  .seat-btn { flex: 1; text-align: left; min-height: 44px; border: 1.5px solid var(--ink); border-radius: var(--r); background: #fff; font: inherit; font-size: 13px; padding: 6px 8px; cursor: pointer; color: var(--ink); }
+  .seat-btn.empty { border-style: dashed; color: var(--muted); }
+  .seat-btn[aria-pressed="true"] { background: var(--fill); outline: 3px solid var(--ink); }
+  .seat-btn .r { display: block; font-size: 12px; color: var(--muted); }
+  .rm { min-height: 44px; min-width: 44px; border: 1.5px solid var(--line); border-radius: var(--r); background: #fff; cursor: pointer; font: inherit; font-size: 13px; }
+  .pool-row { display: grid; grid-template-columns: 28px 1fr auto; gap: 8px; align-items: start; padding: 10px 0; border-bottom: 1px solid var(--line-2); }
+  .pool-row input { width: 20px; height: 20px; margin-top: 3px; }
+  .pool-row .meta { font-size: 13px; color: var(--muted); display: block; }
+  .pool { max-height: 640px; overflow-y: auto; }
+  .cmp { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+  .cmp > div { border: 1.5px solid var(--line); border-radius: var(--r); padding: 10px; font-size: 14px; }
+  .cmp dt { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .cmp dd { margin: 0; font-weight: 600; }
+</style>
+</head>
+<body data-group="manager" data-active="manager-allocation">
+<main id="main">
+  <!-- Fig 5.2.1 Draft allocation (FR-07, FR-09), 5.2.2 Compare staff (FR-08), 5.2.3 Rest-period conflict (FR-10),
+       5.2.7 Publish prompt, 5.2.8 Publish blocked, 5.2.9 Published (FR-35, FR-05, FR-06). UC-10, UC-16. -->
+  <div class="page-head">
+    <div><h1>Allocation</h1><p class="sub">Week 07 – 13 Dec 2026 · publish by <span id="by"></span></p></div>
+    <div class="actions"><span id="status-chip"></span><button class="btn primary" id="publish" type="button">Publish roster</button></div>
+  </div>
+  <div id="flash"></div>
+
+  <section aria-labelledby="slots-h">
+    <h2 id="slots-h">Shift slots <span class="small muted" style="font-weight:400">· fully staffed ambulances, minimum 6</span></h2>
+    <div class="table-wrap" style="border:none"><table class="slots" id="slots"></table></div>
+  </section>
+
+  <div class="row section">
+    <section class="col-main" aria-labelledby="crew-h">
+      <h2 id="crew-h"></h2>
+      <div class="boards" id="boards"></div>
+    </section>
+    <aside class="col-side card" aria-labelledby="pool-h">
+      <h2 id="pool-h">Staff</h2>
+      <div id="pool-msg"></div>
+      <div class="field" style="margin-bottom:8px"><label for="pq">Search name or ID</label><input type="text" id="pq"></div>
+      <label class="choice"><input type="checkbox" id="only-av" checked> Show only staff available for this slot</label>
+      <div class="actions left" style="margin:6px 0"><button class="btn small" id="cmp-btn" type="button" disabled>Compare (0)</button><span class="hint">Tick up to 3 staff to compare.</span></div>
+      <div class="pool" id="pool"></div>
+    </aside>
+  </div>
+</main>
+<script src="assets/wms.js"></script>
+<script src="assets/wms-roster.js"></script>
+<script>
+(function () {
+  var W = WMS, R = W.R, me = W.currentUser();
+  var params = new URLSearchParams(location.search);
+  var slot = params.get('slot') ? +params.get('slot') : 0;
+  var seat = null;               // { amb, key }
+  var compare = [];
+  if (params.get('staff')) document.getElementById('pq').value = params.get('staff');
+  document.getElementById('by').textContent = R.PUBLISH_BY;
+  var SM = function (icon) { return W.ICONS[icon].replace('width="18" height="18"', 'width="13" height="13"'); };
+
+  function locked() { return R.published(); }
+  function flash(kind, html) { document.getElementById('flash').innerHTML = html ? '<div class="banner ' + kind + '" role="' + (kind === 'err' ? 'alert' : 'status') + '">' + W.ICONS[kind === 'err' ? 'alert' : kind === 'ok' ? 'check' : 'info'] + '<div>' + html + '</div></div>' : ''; }
+  function poolMsg(html) { document.getElementById('pool-msg').innerHTML = html ? '<div class="banner err" role="alert">' + W.ICONS.alert + '<p>' + html + '</p></div>' : ''; }
+
+  function renderHead() {
+    document.getElementById('status-chip').innerHTML = locked() ? '<span class="chip ok">' + W.ICONS.check + ' Published</span>' : '<span class="chip tentative">Draft</span>';
+    document.getElementById('publish').disabled = locked();
+  }
+  function renderSlots() {
+    var r = R.roster(), t = '<thead><tr><th></th>';
+    for (var d = 0; d < 7; d++) t += '<th scope="col">' + W.fmtDate(R.SLOTS[d * 2].date) + '</th>';
+    t += '</tr></thead><tbody>';
+    ['Day', 'Night'].forEach(function (name, k) {
+      t += '<tr><th scope="row">' + name + '<span class="small muted" style="display:block;font-weight:400">' + W.SLOT_TIME[name] + '</span></th>';
+      for (var d = 0; d < 7; d++) {
+        var i = d * 2 + k, f = R.fullCount(i, r), short = f < R.MIN_FULL;
+        t += '<td><button type="button" class="slotbtn' + (short ? ' short' : '') + '" data-i="' + i + '" aria-pressed="' + (i === slot) + '" aria-label="' + R.slotLabel(i) + ': ' + f + ' of 6 fully staffed' + (short ? ', below minimum' : '') + '">' +
+          '<span>' + f + ' / 6</span><span class="small">' + (short ? SM('alert') + ' Below' : 'Meets') + '</span></button></td>';
+      }
+      t += '</tr>';
+    });
+    var el = document.getElementById('slots'); el.innerHTML = t + '</tbody>';
+    el.querySelectorAll('.slotbtn').forEach(function (b) { b.addEventListener('click', function () { slot = +b.getAttribute('data-i'); seat = null; poolMsg(''); render(); }); });
+  }
+  function renderBoards() {
+    var r = R.roster(), s = r[slot];
+    document.getElementById('crew-h').textContent = 'Crews – ' + R.slotLabel(slot) + ' (' + R.fullCount(slot, r) + ' of 6 fully staffed)';
+    document.getElementById('boards').innerHTML = R.AMBS.map(function (a) {
+      var c = s[a], st = R.ambStatus(c), flag = st === 'Crew incomplete';
+      var chip = st === 'In service' ? '<span class="chip ok">Full crew</span>' : st === 'Standby' ? '<span class="chip muted">Standby</span>' : '<span class="chip err">Incomplete</span>';
+      return '<div class="board' + (flag ? ' flag' : '') + '"><h3>' + a + chip + '</h3>' + R.SEATS.map(function (se) {
+        var id = c[se[0]], sel = seat && seat.amb === a && seat.key === se[0];
+        if (id) return '<div class="seat"><button type="button" class="seat-btn" data-a="' + a + '" data-k="' + se[0] + '" aria-pressed="' + !!sel + '">' + R.staffName(id) + '<span class="r">' + se[1] + ' · ' + id + ' · ' + R.hours(id, r) + ' h</span></button>' +
+          (locked() ? '' : '<button type="button" class="rm" data-rm-a="' + a + '" data-rm-k="' + se[0] + '" aria-label="Remove ' + R.staffName(id) + ' from ' + a + '">Remove</button>') + '</div>';
+        return '<div class="seat"><button type="button" class="seat-btn empty" data-a="' + a + '" data-k="' + se[0] + '" aria-pressed="' + !!sel + '"' + (locked() ? ' disabled' : '') + '>+ Assign ' + se[1] + '<span class="r">Empty seat</span></button></div>';
+      }).join('') + '</div>';
+    }).join('');
+    document.querySelectorAll('.seat-btn').forEach(function (b) {
+      b.addEventListener('click', function () { seat = { amb: b.getAttribute('data-a'), key: b.getAttribute('data-k') }; poolMsg(''); renderBoards(); renderPool(); document.getElementById('pool-h').scrollIntoView({ block: 'nearest' }); });
+    });
+    document.querySelectorAll('[data-rm-a]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var r = R.roster(), a = b.getAttribute('data-rm-a'), k = b.getAttribute('data-rm-k'), id = r[slot][a][k];
+        r[slot][a][k] = null; R.saveRoster(r);
+        W.audit('Shift unassigned', a + ' ' + R.slotLabel(slot, true) + ' – ' + R.ROLE_OF_SEAT[k], R.staffLabel(id), '–');
+        seat = { amb: a, key: k }; W.toast(R.staffName(id) + ' removed from ' + a + '.'); render();
+      });
+    });
+  }
+
+  function availability(id) {
+    var r = R.roster(), date = R.SLOTS[slot].date, lv = R.onLeave(id, date);
+    if (lv) return { code: 'leave', text: lv.cat, chip: '<span class="chip muted">On leave</span>' };
+    var in_ = R.seatsOf(id, r).filter(function (x) { return x.slot === slot; })[0];
+    if (in_) return { code: 'in', text: 'In this slot on ' + in_.amb, chip: '<span class="chip muted">On ' + in_.amb + '</span>' };
+    return R.available(id, slot) ? { code: 'av', chip: '<span class="chip ok">Available</span>' } : { code: 'na', chip: '<span class="chip muted">Not available</span>' };
+  }
+  function renderPool() {
+    var r = R.roster(), role = seat ? R.ROLE_OF_SEAT[seat.key] : null;
+    document.getElementById('pool-h').textContent = seat ? 'Choose a ' + role + ' for ' + seat.amb : 'Staff';
+    var q = document.getElementById('pq').value.trim().toLowerCase(), onlyAv = document.getElementById('only-av').checked;
+    var list = R.STAFF.filter(function (s) { return (!role || s.role === role) && (!q || (s.name + ' ' + s.id).toLowerCase().indexOf(q) >= 0); })
+      .map(function (s) { return { s: s, h: R.hours(s.id, r), av: availability(s.id) }; })
+      .filter(function (x) { return !onlyAv || q || x.av.code === 'av'; })
+      .sort(function (a, b) { return (a.av.code === 'av' ? 0 : 1) - (b.av.code === 'av' ? 0 : 1) || a.h - b.h || a.s.name.localeCompare(b.s.name); })
+      .slice(0, 30);
+    var html = seat ? '' : '<p class="hint">Select a seat on an ambulance to assign someone. You can still compare staff here.</p>';
+    html += list.map(function (x) {
+      var s = x.s, checked = compare.indexOf(s.id) >= 0, dis = !checked && compare.length >= 3;
+      return '<div class="pool-row"><input type="checkbox" data-c="' + s.id + '" aria-label="Compare ' + s.name + '"' + (checked ? ' checked' : '') + (dis ? ' disabled title="Compare up to 3 staff"' : '') + '>' +
+        '<div><strong>' + s.name + '</strong> <span class="muted small">' + s.id + '</span><span class="meta">' + s.role + ' · ' + x.h + ' h this week' + (x.h > 40 ? ' · <strong>Over 40 h</strong>' : '') + '</span>' +
+        '<span class="meta">Prefers ' + s.pref + ' · ' + s.duty + ' · ' + s.base + '</span><span style="display:block;margin-top:4px">' + x.av.chip + '</span></div>' +
+        (seat && !locked() ? '<button type="button" class="btn small" data-as="' + s.id + '">Assign</button>' : '<span></span>') + '</div>';
+    }).join('') || '<p class="muted">No staff match. Untick "Show only staff available" to see everyone.</p>';
+    var p = document.getElementById('pool'); p.innerHTML = html;
+    p.querySelectorAll('[data-c]').forEach(function (c) {
+      c.addEventListener('change', function () {
+        var id = c.getAttribute('data-c');
+        if (c.checked) compare.push(id); else compare = compare.filter(function (x) { return x !== id; });
+        renderPool();
+      });
+    });
+    p.querySelectorAll('[data-as]').forEach(function (b) { b.addEventListener('click', function () { assign(b.getAttribute('data-as')); }); });
+    var cb = document.getElementById('cmp-btn'); cb.textContent = 'Compare (' + compare.length + ')'; cb.disabled = compare.length < 2;
+  }
+
+  /* FR-10 rest rule, leave and double-booking checks */
+  function assign(id) {
+    var r = R.roster(), s = R.BY_ID[id], date = R.SLOTS[slot].date;
+    var lv = R.onLeave(id, date);
+    if (lv) { poolMsg('<strong>Cannot assign ' + s.name + '.</strong> They are on ' + lv.cat + ' on ' + W.fmtDate(date) + '.'); return; }
+    var rc = R.restCheck(id, slot, r);
+    if (!rc.ok && rc.kind === 'same') { poolMsg('<strong>Cannot assign ' + s.name + '.</strong> They are already on ' + rc.other.amb + ' in this slot.'); return; }
+    if (!rc.ok) {
+      poolMsg('<strong>Cannot assign ' + s.name + ': not enough rest.</strong> They would get only ' + rc.rest + ' hours of rest between this shift and ' +
+        R.slotLabel(rc.other.slot) + ' on ' + rc.other.amb + '. At least 12 hours are needed.');
+      return;
+    }
+    function go() {
+      var prev = r[slot][seat.amb][seat.key];
+      r[slot][seat.amb][seat.key] = id; R.saveRoster(r);
+      W.audit('Shift assigned', seat.amb + ' ' + R.slotLabel(slot, true) + ' – ' + R.ROLE_OF_SEAT[seat.key], prev ? R.staffLabel(prev) : '–', R.staffLabel(id));
+      var h = R.hours(id, r);
+      W.toast(s.name + ' assigned to ' + seat.amb + '.' + (h > 40 ? ' They now have ' + h + ' h this week (over 40).' : ''));
+      poolMsg(''); seat = null; render();
+    }
+    if (!R.available(id, slot)) {
+      W.modal({ title: 'Assign anyway?', html: '<p>' + W.esc(s.name) + ' marked ' + W.esc(R.slotLabel(slot)) + ' as not available.</p>', actions: [{ label: 'Cancel' }, { label: 'Assign anyway', primary: true, onClick: go }] });
+    } else go();
+  }
+
+  document.getElementById('cmp-btn').addEventListener('click', function () {
+    var r = R.roster();
+    W.modal({ title: 'Compare staff', html: '<p class="muted" style="margin-top:0">For ' + R.slotLabel(slot) + '</p><div class="cmp">' + compare.map(function (id) {
+      var s = R.BY_ID[id], av = availability(id);
+      return '<div><strong>' + s.name + '</strong><dl style="margin:0"><dt>Role</dt><dd>' + s.role + '</dd><dt>Hours this week</dt><dd>' + R.hours(id, r) + ' h</dd>' +
+        '<dt>Preference</dt><dd>' + s.pref + ', ' + s.duty + '</dd><dt>Location zone</dt><dd>' + s.base + '</dd><dt>This slot</dt><dd>' + av.chip + '</dd></dl></div>';
+    }).join('') + '</div>', actions: [{ label: 'Close', primary: true }] });
+  });
+  document.getElementById('pq').addEventListener('input', renderPool);
+  document.getElementById('only-av').addEventListener('change', renderPool);
+
+  /* FR-35: publish only when every slot has at least 6 fully staffed ambulances (same rule as WeeklyRoster.checkStaffingRequirements) */
+  document.getElementById('publish').addEventListener('click', function () {
+    var short = R.shortSlots();
+    if (short.length) {
+      var list = '<ul style="padding-left:20px">' + short.map(function (s) { return '<li>' + R.slotLabel(s.i) + ': ' + s.full + ' of 6</li>'; }).join('') + '</ul>';
+      flash('err', '<p><strong>Roster not published. Fewer than six fully staffed ambulances in service.</strong> The roster stays in Draft.</p>' + list);
+      W.notify('Fewer than six fully staffed ambulances in service – ' + R.slotLabel(short[0].i) + '. Roster kept in Draft.');
+      W.modal({ title: 'Roster not published', html: '<p>Fewer than six fully staffed ambulances in service in ' + short.length + (short.length === 1 ? ' slot' : ' slots') + ':</p>' + list +
+        '<p class="muted">Each ambulance needs 1 Driver, 1 Care Assistant and 2 Paramedics. The roster stays in Draft.</p>',
+        actions: [{ label: 'Close' }, { label: 'Go to ' + R.slotLabel(short[0].i, true), primary: true, onClick: function () { slot = short[0].i; seat = null; render(); } }] });
+      return;
+    }
+    W.modal({ title: 'Publish roster for 07 – 13 Dec 2026?', html: '<p>Every slot has at least 6 fully staffed ambulances. All ' + R.STAFF.length + ' operational staff will be notified and the roster becomes read-only.</p>',
+      actions: [{ label: 'Cancel' }, { label: 'Publish', primary: true, onClick: function () {
+        W.store.set('published0712', true);
+        ['nur.aisyah', 'ravi.kumar', 'marcus.tan'].forEach(function (u) { W.notify('Your roster for 07 – 13 Dec 2026 has been published.', u); });
+        W.audit('Roster published', 'Week 07 – 13 Dec 2026', 'Draft', 'Published');
+        flash('ok', '<p><strong>Roster published.</strong> ' + R.STAFF.length + ' staff have been notified. Later changes go through Swaps &amp; Stand-ins.</p>');
+        render();
+      } }] });
+  });
+
+  function render() { renderHead(); renderSlots(); renderBoards(); renderPool(); }
+  if (locked()) flash('ok', '<p><strong>This roster is published.</strong> Use Swaps &amp; Stand-ins for changes.</p>');
+  render();
+
+  var ctl = [1, 2, 3, 4, 5, 6].map(function (n) {
+    return { label: 'White-box test #' + n, onClick: function () {
+      W.store.set('published0712', false); R.loadTestCase(n); slot = 0; seat = null; flash('', ''); poolMsg('');
+      render(); W.toast('Test case #' + n + ' loaded into Mon 07 Dec, Day. Click Publish roster.');
+    } };
+  });
+  W.controls(ctl.concat([
+    { label: 'Reset roster to starting draft', onClick: function () { W.store.set('roster.0712', null); W.store.set('published0712', false); W.store.set('mgr.rejections', null); location.href = 'manager-allocation.html'; } }
+  ]));
+})();
+</script>
+</body>
+</html>

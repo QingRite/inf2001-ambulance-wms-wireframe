@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Requests – WMS</title>
+<link rel="stylesheet" href="assets/wms.css">
+<style>
+  .reqs { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+  .req h2 { font-size: 17px; margin: 0; }
+  .req dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 12px 0; font-size: 14px; }
+  .req dt { color: var(--muted); }
+  .req dd { margin: 0; }
+  .req .reason { border-left: 3px solid var(--ink); padding: 6px 10px; background: var(--fill-2); margin: 0 0 12px; }
+</style>
+</head>
+<body data-group="manager" data-active="manager-requests">
+<main id="main">
+  <!-- Fig 5.3.8 Manager notification (FR-15), 5.3.9 Review late availability request (FR-16). UC-13.
+       M1 feedback (M-01): show the reason on the card. -->
+  <div class="page-head">
+    <div><h1>Requests</h1><p class="sub">Late availability requests sent after a week's Thursday cutoff. Approving updates the person's availability; rejecting leaves it unchanged.</p></div>
+  </div>
+  <div id="flash"></div>
+  <div class="tabs" role="tablist" id="tabs"></div>
+  <div class="reqs" id="list"></div>
+</main>
+<script src="assets/wms.js"></script>
+<script src="assets/wms-roster.js"></script>
+<script>
+(function () {
+  var W = WMS, R = W.R, tab = 'pending';
+  var USERS = { 'Nur Aisyah': 'nur.aisyah', 'Ravi Kumar': 'ravi.kumar', 'Marcus Tan': 'marcus.tan' };
+  function seeded() {
+    var s = W.store.get('mgr.lateSeed', null);
+    if (!s) {
+      s = [
+        { id: 'LR-1038', staff: 'Ravi Kumar', staffId: 'CA-03', week: '2026-12-07', change: 'Not available Thu 10 Dec, Day', reason: 'Specialist appointment for my father that morning. I only got the date yesterday.', status: 'Pending Manager approval', sent: '2026-11-26', slot: 6, avail: false },
+        { id: 'LR-1039', staff: 'Hafiz Osman', staffId: 'DRV-09', week: '2026-12-07', change: 'Available Sat 12 Dec, Night (extra)', reason: 'My family plans changed, so I can cover a short slot.', status: 'Pending Manager approval', sent: '2026-11-27', slot: 11, avail: true }
+      ];
+      W.store.set('mgr.lateSeed', s);
+    }
+    return s;
+  }
+  function all() {
+    var staff = W.store.get('lateRequests', []).map(function (x) { x._src = 'staff'; x.staffId = x.staffId || 'PM-05'; x.staff = x.staff || 'Nur Aisyah'; return x; });
+    return staff.concat(seeded().map(function (x) { x._src = 'seed'; return x; }));
+  }
+  function save(req) {
+    var key = req._src === 'staff' ? 'lateRequests' : 'mgr.lateSeed';
+    var list = W.store.get(key, []).map(function (x) { return x.id === req.id ? Object.assign({}, x, { status: req.status, decided: W.TODAY }) : x; });
+    W.store.set(key, list);
+  }
+  function chip(st) { return /Approved/.test(st) ? '<span class="chip ok">' + W.ICONS.check + ' Approved</span>' : /Rejected/.test(st) ? '<span class="chip err">Rejected</span>' : '<span class="chip">' + W.ICONS.clock + ' Pending</span>'; }
+
+  function render() {
+    var list = all(), pend = list.filter(function (x) { return /Pending/.test(x.status); });
+    var T = [['pending', 'Pending (' + pend.length + ')'], ['decided', 'Decided'], ['all', 'All']];
+    var t = document.getElementById('tabs');
+    t.innerHTML = T.map(function (x) { return '<button role="tab" aria-selected="' + (x[0] === tab) + '" data-t="' + x[0] + '">' + x[1] + '</button>'; }).join('');
+    t.querySelectorAll('[data-t]').forEach(function (b) { b.addEventListener('click', function () { tab = b.getAttribute('data-t'); render(); }); });
+    var shown = list.filter(function (x) { return tab === 'all' || (tab === 'pending') === /Pending/.test(x.status); });
+    document.getElementById('list').innerHTML = shown.map(function (x) {
+      var s = R.BY_ID[x.staffId];
+      return '<article class="card req"><div class="page-head" style="margin:0"><div><h2>' + W.esc(x.staff) + '</h2><span class="small muted">' + (s ? s.role + ' · ' + s.id : '') + ' · ' + x.id + '</span></div>' + chip(x.status) + '</div>' +
+        '<dl><dt>Week</dt><dd>' + W.fmtDate(x.week, { noDay: true }) + ' – ' + W.fmtDate(W.addDays(x.week, 6), { noDay: true, year: true }) + '</dd><dt>Change</dt><dd><strong>' + W.esc(x.change) + '</strong></dd><dt>Sent</dt><dd>' + W.fmtDate(x.sent) + ', after the cutoff</dd></dl>' +
+        '<p class="reason"><span class="small muted" style="display:block">Reason given</span>' + W.esc(x.reason) + '</p>' +
+        (/Pending/.test(x.status) ? '<div class="actions"><button class="btn danger" data-rej="' + x.id + '">Reject</button><button class="btn primary" data-ok="' + x.id + '">Approve</button></div>' : '') + '</article>';
+    }).join('') || '<p class="muted">No requests here.</p>';
+    document.querySelectorAll('[data-ok]').forEach(function (b) { b.addEventListener('click', function () { decide(b.getAttribute('data-ok'), true); }); });
+    document.querySelectorAll('[data-rej]').forEach(function (b) { b.addEventListener('click', function () { decide(b.getAttribute('data-rej'), false); }); });
+  }
+
+  /* FR-16: approve updates availability for the target week; reject leaves it unchanged */
+  function decide(id, ok) {
+    var req = all().filter(function (x) { return x.id === id; })[0];
+    W.modal({
+      title: ok ? 'Approve this late request?' : 'Reject this late request?',
+      html: '<p><strong>' + W.esc(req.staff) + '</strong>: ' + W.esc(req.change) + '</p><p class="muted">' + (ok ? 'Their availability for the week of ' + W.fmtDate(req.week, { noDay: true }) + ' will be updated, and they will be notified.' : 'Their existing availability stays as it is, and they will be notified.') + '</p>',
+      actions: [{ label: 'Cancel' }, { label: ok ? 'Approve' : 'Reject', primary: true, danger: !ok, onClick: function () {
+        req.status = ok ? 'Approved' : 'Rejected'; save(req);
+        if (ok && typeof req.slot === 'number') { var o = W.store.get('availOverride', {}); o[req.staffId + '|' + req.slot] = req.avail; W.store.set('availOverride', o); }
+        if (USERS[req.staff]) W.notify('Your late availability request (' + req.change + ') was ' + (ok ? 'approved. Your availability has been updated.' : 'rejected. Your availability is unchanged.'), USERS[req.staff]);
+        W.audit(ok ? 'Late request approved' : 'Late request rejected', req.staff + ' – ' + req.id, 'Pending', ok ? 'Approved: ' + req.change : 'Rejected');
+        document.getElementById('flash').innerHTML = '<div class="banner ok" role="status">' + W.ICONS.check + '<p><strong>Request ' + (ok ? 'approved' : 'rejected') + '.</strong> ' + W.esc(req.staff) + (ok ? "'s availability has been updated" : "'s availability is unchanged") + ' and they have been notified.</p></div>';
+        render();
+      } }]
+    });
+  }
+  render();
+  W.controls([{ label: 'Reset sample requests', onClick: function () { W.store.set('mgr.lateSeed', null); render(); } }]);
+})();
+</script>
+</body>
+</html>

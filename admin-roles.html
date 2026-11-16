@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roles & Permissions – WMS</title>
+<link rel="stylesheet" href="assets/wms.css">
+<style>
+  .matrix th, .matrix td { text-align: center; font-size: 14px; }
+  .matrix th[scope="row"] { text-align: left; font-weight: 500; }
+  .matrix input { width: 22px; height: 22px; }
+  .diff { list-style: none; padding: 0; margin: 8px 0 0; font-size: 14px; }
+  .diff li { padding: 4px 0; }
+  .add { color: var(--ok-ink); font-weight: 600; }
+  .rem { color: var(--err); font-weight: 600; }
+</style>
+</head>
+<body data-group="admin" data-active="admin-roles">
+<main id="main">
+  <!-- New figure: Roles & Permissions (FR-28, FR-29, FR-41, FR-42). UC-18 Manage roles and permissions. -->
+  <h1>Roles &amp; Permissions</h1>
+  <p class="sub">Change a user's role, or change what each role is allowed to do. Every saved change is checked and recorded in the audit log.</p>
+  <div id="flash"></div>
+
+  <div class="row">
+    <section class="col-side card" aria-labelledby="user-h">
+      <h2 id="user-h">Change a user's role</h2>
+      <form id="user-form" novalidate>
+        <div class="form-summary"></div>
+        <div class="field"><label for="u">User<span class="req" aria-hidden="true">*</span></label><select id="u"><option value="">Select a user</option></select></div>
+        <div id="current"></div>
+        <div class="field"><label for="newrole">New role<span class="req" aria-hidden="true">*</span></label><select id="newrole"><option value="">Select a role</option></select></div>
+        <div id="diff"></div>
+        <div class="actions"><button class="btn primary" type="submit">Save role</button></div>
+      </form>
+    </section>
+
+    <section class="col-main card" aria-labelledby="mx-h">
+      <h2 id="mx-h">Permissions by role</h2>
+      <div class="form-summary" id="mx-summary"></div>
+      <div class="table-wrap"><table class="matrix" id="matrix"></table></div>
+      <div class="actions" style="margin-top:12px"><button class="btn" id="undo" type="button">Discard changes</button><button class="btn primary" id="save-mx" type="button">Save permissions</button></div>
+    </section>
+  </div>
+</main>
+<script src="assets/wms.js"></script>
+<script src="assets/wms-roster.js"></script>
+<script>
+(function () {
+  var W = WMS, R = W.R, me = W.currentUser();
+  var PNAME = {}; R.PERMS.forEach(function (p) { PNAME[p[0]] = p[1]; });
+  var draft = JSON.parse(JSON.stringify(R.rolePerms()));
+  function flash(kind, html) { document.getElementById('flash').innerHTML = '<div class="banner ' + kind + '" role="' + (kind === 'err' ? 'alert' : 'status') + '">' + W.ICONS[kind === 'err' ? 'alert' : 'check'] + '<p>' + html + '</p></div>'; }
+
+  /* ---- user role change ---- */
+  var u = document.getElementById('u'), nr = document.getElementById('newrole');
+  u.insertAdjacentHTML('beforeend', R.accounts().filter(function (a) { return a.status === 'Active'; }).sort(function (a, b) { return a.name.localeCompare(b.name); })
+    .map(function (a) { return '<option value="' + a.username + '">' + W.esc(a.name) + ' (' + a.username + ')</option>'; }).join(''));
+  nr.insertAdjacentHTML('beforeend', R.ROLES.map(function (r) { return '<option>' + r + '</option>'; }).join(''));
+  function acc() { return R.accounts().filter(function (a) { return a.username === u.value; })[0]; }
+  function showUser() {
+    var a = acc();
+    document.getElementById('current').innerHTML = a ? '<p style="margin:0 0 12px">Current role: <strong>' + a.role + '</strong><br><span class="small muted">' + (R.rolePerms()[a.role] || []).length + ' permissions</span></p>' : '';
+    showDiff();
+  }
+  function showDiff() {
+    var a = acc(), d = document.getElementById('diff');
+    if (!a || !nr.value || nr.value === a.role) { d.innerHTML = ''; return; }
+    var p = R.rolePerms(), from = p[a.role] || [], to = p[nr.value] || [];
+    var add = to.filter(function (k) { return from.indexOf(k) < 0; }), rem = from.filter(function (k) { return to.indexOf(k) < 0; });
+    d.innerHTML = '<div class="field"><span class="label">What changes</span><ul class="diff">' +
+      add.map(function (k) { return '<li class="add">+ ' + PNAME[k] + '</li>'; }).join('') + rem.map(function (k) { return '<li class="rem">− ' + PNAME[k] + '</li>'; }).join('') + '</ul></div>';
+  }
+  u.addEventListener('change', showUser); nr.addEventListener('change', showDiff);
+  document.getElementById('user-form').addEventListener('submit', function (e) {
+    e.preventDefault(); var f = this; W.clearErrors(f);
+    if (!u.value) W.setError(u, 'Select a user.');
+    if (!nr.value) W.setError(nr, 'Select the new role.');
+    var a = acc();
+    if (a && nr.value && nr.value === a.role) W.setError(nr, 'This is already their role. Pick a different one.');
+    if (a && a.username === me.key) W.setError(u, 'You cannot change your own role. Ask another IT Administrator.');
+    if (a && a.role === 'IT Administrator' && nr.value && nr.value !== 'IT Administrator' && R.accounts().filter(function (x) { return x.role === 'IT Administrator' && x.status === 'Active'; }).length < 2)
+      W.setError(nr, 'At least one active IT Administrator is needed.');
+    if (f.querySelector('[aria-invalid]')) { W.summary(f, 'Role not saved. Fix the fields marked below.'); return; }
+    var list = R.accounts(), x = list.filter(function (y) { return y.username === a.username; })[0], prev = x.role;
+    x.role = nr.value; R.saveAccounts(list);
+    W.audit('Role changed', x.name + ' (' + x.username + ')', prev, x.role);
+    flash('ok', '<strong>Role saved.</strong> ' + W.esc(x.name) + ' changed from ' + prev + ' to ' + x.role + '. The change is in the audit log.');
+    nr.value = ''; showUser();
+  });
+
+  /* ---- permission matrix ---- */
+  function renderMatrix() {
+    var t = '<thead><tr><th scope="col">Permission</th>' + R.ROLES.map(function (r) { return '<th scope="col">' + r + '</th>'; }).join('') + '</tr></thead><tbody>';
+    R.PERMS.forEach(function (p) {
+      t += '<tr><th scope="row">' + p[1] + '</th>' + R.ROLES.map(function (r) {
+        return '<td><input type="checkbox" data-r="' + r + '" data-p="' + p[0] + '" aria-label="' + r + ': ' + p[1] + '"' + (draft[r].indexOf(p[0]) >= 0 ? ' checked' : '') + '></td>';
+      }).join('') + '</tr>';
+    });
+    var m = document.getElementById('matrix'); m.innerHTML = t + '</tbody>';
+    m.querySelectorAll('input').forEach(function (c) {
+      c.addEventListener('change', function () {
+        var r = c.getAttribute('data-r'), p = c.getAttribute('data-p');
+        if (c.checked) draft[r].push(p); else draft[r] = draft[r].filter(function (x) { return x !== p; });
+      });
+    });
+  }
+  /* UC-18: validate the configuration before saving */
+  document.getElementById('save-mx').addEventListener('click', function () {
+    var errs = [];
+    R.ROLES.forEach(function (r) { if (r !== 'Manager' && draft[r].indexOf('conf') >= 0) errs.push(r + ' cannot view confidential staff records. Only Managers may (FR-41, FR-42).'); });
+    if (!R.ROLES.some(function (r) { return draft[r].indexOf('accounts') >= 0; })) errs.push('At least one role must be able to manage user accounts.');
+    if (draft['Manager'].indexOf('publish') < 0) errs.push('Managers must keep "Publish the roster" (FR-35).');
+    var s = document.getElementById('mx-summary');
+    if (errs.length) { s.innerHTML = '<div class="banner err" role="alert">' + W.ICONS.alert + '<div><p><strong>Permissions not saved.</strong></p><ul style="margin:6px 0 0;padding-left:20px">' + errs.map(function (e) { return '<li>' + e + '</li>'; }).join('') + '</ul></div></div>'; return; }
+    s.innerHTML = '';
+    var old = R.rolePerms(), changes = [];
+    R.ROLES.forEach(function (r) {
+      var add = draft[r].filter(function (k) { return old[r].indexOf(k) < 0; }), rem = old[r].filter(function (k) { return draft[r].indexOf(k) < 0; });
+      if (add.length || rem.length) { changes.push(r); W.audit('Permissions changed', 'Role: ' + r, rem.map(function (k) { return '−' + PNAME[k]; }).join('; ') || '–', add.map(function (k) { return '+' + PNAME[k]; }).join('; ') || '–'); }
+    });
+    if (!changes.length) { flash('ok', 'No changes to save.'); return; }
+    W.store.set('rolePerms', draft); draft = JSON.parse(JSON.stringify(draft));
+    flash('ok', '<strong>Permissions saved</strong> for ' + changes.join(', ') + '. The change is in the audit log.');
+  });
+  document.getElementById('undo').addEventListener('click', function () { draft = JSON.parse(JSON.stringify(R.rolePerms())); document.getElementById('mx-summary').innerHTML = ''; renderMatrix(); });
+  renderMatrix();
+  W.controls([
+    { label: 'Show validation error (give Driver confidential access)', onClick: function () { draft['Driver'].push('conf'); renderMatrix(); document.getElementById('save-mx').click(); } },
+    { label: 'Reset roles and permissions', onClick: function () { W.store.set('rolePerms', null); draft = JSON.parse(JSON.stringify(R.rolePerms())); renderMatrix(); } }
+  ]);
+})();
+</script>
+</body>
+</html>

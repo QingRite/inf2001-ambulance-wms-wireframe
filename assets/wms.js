@@ -10,9 +10,9 @@
 
   /* ---------- Personas (login usernames) ---------- */
   var PERSONAS = {
-    'nur.aisyah': { name: 'Nur Aisyah', role: 'Paramedic', group: 'staff', id: 'PM-014', zone: 'North zone, Ang Mo Kio base', phone: '9123 4567', email: 'nur.aisyah@hospital.example', address: 'Blk 456 Yishun Ave 6, #08-21' },
-    'ravi.kumar': { name: 'Ravi Kumar', role: 'Care Assistant', group: 'staff', id: 'CA-008', zone: 'North zone, Ang Mo Kio base', phone: '9234 5678', email: 'ravi.kumar@hospital.example', address: 'Blk 12 Toa Payoh Lor 7, #03-110' },
-    'marcus.tan': { name: 'Marcus Tan', role: 'Driver', group: 'staff', id: 'DRV-005', zone: 'North zone, Ang Mo Kio base', phone: '9345 6789', email: 'marcus.tan@hospital.example', address: 'Blk 88 Bishan St 12, #10-05' },
+    'nur.aisyah': { name: 'Nur Aisyah', role: 'Paramedic', group: 'staff', id: 'PM-05', zone: 'North zone, Ang Mo Kio base', phone: '9123 4567', email: 'nur.aisyah@hospital.example', address: 'Blk 456 Yishun Ave 6, #08-21' },
+    'ravi.kumar': { name: 'Ravi Kumar', role: 'Care Assistant', group: 'staff', id: 'CA-03', zone: 'North zone, Ang Mo Kio base', phone: '9234 5678', email: 'ravi.kumar@hospital.example', address: 'Blk 12 Toa Payoh Lor 7, #03-110' },
+    'marcus.tan': { name: 'Marcus Tan', role: 'Driver', group: 'staff', id: 'DRV-03', zone: 'North zone, Ang Mo Kio base', phone: '9345 6789', email: 'marcus.tan@hospital.example', address: 'Blk 88 Bishan St 12, #10-05' },
     'rachel.lim': { name: 'Rachel Lim', role: 'Manager', group: 'manager', id: 'MGR-002' },
     'jason.ong': { name: 'Jason Ong', role: 'IT Administrator', group: 'admin', id: 'IT-001' },
     'alex.wong': { name: 'Alex Wong', role: 'Paramedic', group: 'staff', id: 'PM-031', deactivated: true }
@@ -29,21 +29,21 @@
       ['profile', 'Profile', 'staff-profile.html']
     ],
     manager: [
-      ['manager-overview', 'Overview', 'todo.html?p=manager-overview'],
-      ['manager-allocation', 'Allocation', 'todo.html?p=manager-allocation'],
-      ['manager-coverage', 'Coverage', 'todo.html?p=manager-coverage'],
-      ['manager-timetable', 'Timetable', 'todo.html?p=manager-timetable'],
-      ['manager-requests', 'Requests', 'todo.html?p=manager-requests'],
-      ['manager-swaps', 'Swaps & Stand-ins', 'todo.html?p=manager-swaps'],
-      ['manager-leave', 'Leave Records', 'todo.html?p=manager-leave']
+      ['manager-overview', 'Overview', 'manager-overview.html'],
+      ['manager-allocation', 'Allocation', 'manager-allocation.html'],
+      ['manager-coverage', 'Coverage', 'manager-coverage.html'],
+      ['manager-timetable', 'Timetable', 'manager-timetable.html'],
+      ['manager-requests', 'Requests', 'manager-requests.html'],
+      ['manager-swaps', 'Swaps & Stand-ins', 'manager-swaps.html'],
+      ['manager-leave', 'Leave Records', 'manager-leave.html']
     ],
     admin: [
-      ['admin-accounts', 'Accounts', 'todo.html?p=admin-accounts'],
-      ['admin-roles', 'Roles & Permissions', 'todo.html?p=admin-roles'],
-      ['admin-audit', 'Audit Log', 'todo.html?p=admin-audit']
+      ['admin-accounts', 'Accounts', 'admin-accounts.html'],
+      ['admin-roles', 'Roles & Permissions', 'admin-roles.html'],
+      ['admin-audit', 'Audit Log', 'admin-audit.html']
     ]
   };
-  var HOME = { staff: 'staff-schedule.html', manager: 'todo.html?p=manager-overview', admin: 'todo.html?p=admin-accounts' };
+  var HOME = { staff: 'staff-schedule.html', manager: 'manager-overview.html', admin: 'admin-accounts.html' };
   var DEFAULT_USER = { staff: 'nur.aisyah', manager: 'rachel.lim', admin: 'jason.ong' };
 
   /* ---------- Shared sample data ---------- */
@@ -337,13 +337,36 @@
     document.body.appendChild(sec);
   }
 
+  /* ---------- Audit trail (FR-32): every committed roster, swap, absence, replacement or account change ---------- */
+  function audit(action, target, prev, next) {
+    var u = currentUser() || { name: 'System' };
+    var list = store.get('audit', null) || seedAudit();
+    list.unshift({ ts: Date.now(), user: u.name, ip: '10.20.4.' + (11 + (u.name.length * 7) % 80), action: action, target: target, prev: prev == null ? '–' : String(prev), next: next == null ? '–' : String(next) });
+    store.set('audit', list.slice(0, 300));
+  }
+  function seedAudit() {
+    var h = 3600000, now = Date.now();
+    var s = [
+      { ts: now - 2 * h, user: 'Jason Ong', ip: '10.20.4.67', action: 'Role changed', target: 'Kelvin Goh (DRV-15)', prev: 'Driver: standard permissions', next: 'Driver: + view crew listings' },
+      { ts: now - 26 * h, user: 'Rachel Lim', ip: '10.20.4.81', action: 'Absence recorded', target: 'Daniel Ho (PM-06)', prev: '–', next: 'Annual Leave 03–04 Dec 2026' },
+      { ts: now - 50 * h, user: 'Rachel Lim', ip: '10.20.4.81', action: 'Roster published', target: 'Week 30 Nov – 06 Dec 2026', prev: 'Draft', next: 'Published' },
+      { ts: now - 74 * h, user: 'Jason Ong', ip: '10.20.4.67', action: 'Account deactivated', target: 'Alex Wong (PM-31)', prev: 'Active', next: 'Deactivated' }
+    ];
+    store.set('audit', s); return s;
+  }
+  function isDeactivated(key) {
+    var acc = store.get('accounts', null);
+    if (acc) { var a = acc.filter(function (x) { return x.username === key; })[0]; if (a) return a.status === 'Deactivated'; }
+    return !!(PERSONAS[key] && PERSONAS[key].deactivated);
+  }
+
   window.WMS = {
     TODAY: TODAY, PERSONAS: PERSONAS, PASSWORD: PASSWORD, HOME: HOME, NAV: NAV,
     WEEKS: WEEKS, MY_SHIFTS: MY_SHIFTS, COLLEAGUES: COLLEAGUES, SLOT_TIME: SLOT_TIME, ICONS: ICONS,
     store: store, esc: esc, nonWs: nonWs, parse: parse, addDays: addDays, fmtDate: fmtDate, shiftLabel: shiftLabel, ago: ago,
     currentUser: currentUser, ensureUser: ensureUser, login: login, logout: logout,
     notes: notes, notify: notify, openInbox: openInbox, renderInbox: renderInbox,
-    modal: modal, closeModal: closeModal, toast: toast, setError: setError, clearErrors: clearErrors, summary: summary, controls: controls
+    modal: modal, closeModal: closeModal, toast: toast, setError: setError, clearErrors: clearErrors, summary: summary, controls: controls, audit: audit, seedAudit: seedAudit, isDeactivated: isDeactivated
   };
 
   buildShell();

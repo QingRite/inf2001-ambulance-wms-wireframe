@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Swaps & Stand-ins – WMS</title>
+<link rel="stylesheet" href="assets/wms.css">
+<style>
+  .pos { margin-bottom: 14px; }
+  .pos.open { border: 2px solid var(--err); }
+  .pos h2 { font-size: 17px; margin: 0; }
+  .quote { border-left: 3px solid var(--ink); padding: 6px 10px; background: var(--fill-2); margin: 10px 0; }
+  .cand { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line-2); }
+  .cand .meta { font-size: 13px; color: var(--muted); display: block; }
+  .pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin: 12px 0; }
+  .pair > div { border: 1.5px solid var(--line); border-radius: var(--r); padding: 10px; background: var(--fill-2); }
+  .pair .lbl { font-size: 13px; color: var(--muted); display: block; }
+</style>
+</head>
+<body data-group="manager" data-active="manager-swaps">
+<main id="main">
+  <!-- Fig 5.4.5 Position unstaffed (FR-20), 5.5.3 Manager swap approval, 5.5.4 Swap approved (FR-22),
+       5.6.3 Stand-in candidates (FR-24), 5.6.4 Confirm stand-in, 5.6.5 Stand-in notified (FR-25). UC-12, UC-14. -->
+  <div class="page-head">
+    <div><h1>Swaps &amp; Stand-ins</h1><p class="sub">Fill crew positions left by rejected shifts and absences, and approve swaps both staff have agreed to.</p></div>
+  </div>
+  <div id="flash"></div>
+  <div class="tabs" role="tablist" id="tabs"></div>
+  <div id="panel"></div>
+</main>
+<script src="assets/wms.js"></script>
+<script src="assets/wms-roster.js"></script>
+<script>
+(function () {
+  var W = WMS, R = W.R, tab = 'positions', openPos = null;
+  var USERS = { 'PM-05': 'nur.aisyah', 'CA-03': 'ravi.kumar', 'DRV-03': 'marcus.tan' };
+  var SEAT_KEY = { 'Paramedic': 'pm2', 'Care Assistant': 'ca', 'Driver': 'driver' };
+
+  /* ---------- Unstaffed positions (FR-20 rejections, absences) ---------- */
+  function filled() { return W.store.get('mgr.filled', {}); }
+  function positions() {
+    var out = [];
+    R.rejections().forEach(function (x, k) {
+      out.push({ key: 'rej-' + k, staff: x.staff, role: R.BY_ID[x.staff].role, slot: x.slot, amb: x.amb, seat: x.seat, date: R.SLOTS[x.slot].date, label: R.slotLabel(x.slot), why: x.why || 'Shift rejected', reason: x.reason });
+    });
+    var rej = W.store.get('rejected', {});
+    W.MY_SHIFTS.forEach(function (s) {
+      if (rej[s.id]) out.push({ key: 'srej-' + s.id, staff: 'PM-05', role: 'Paramedic', slot: null, amb: s.amb, date: s.date, label: W.fmtDate(s.date) + ', ' + s.slot + ' ' + W.SLOT_TIME[s.slot], why: 'Shift rejected', reason: rej[s.id].reason, dayslot: s.slot });
+    });
+    W.store.get('absences', []).forEach(function (a, k) {
+      W.MY_SHIFTS.filter(function (s) { return s.date >= a.start && s.date <= a.end; }).forEach(function (s) {
+        out.push({ key: 'abs-' + k + '-' + s.id, staff: 'PM-05', role: 'Paramedic', slot: null, amb: s.amb, date: s.date, label: W.fmtDate(s.date) + ', ' + s.slot + ' ' + W.SLOT_TIME[s.slot], why: a.cat, reason: a.desc || 'No description given.', dayslot: s.slot });
+      });
+    });
+    var f = filled(); out.forEach(function (p) { p.filledBy = f[p.key] || null; });
+    return out;
+  }
+  /* FR-24: same role, not on leave, rest rule met, not already working that slot; off-duty standby first, then fewest hours */
+  function candidates(p) {
+    var r = R.roster();
+    return R.STAFF.filter(function (s) {
+      if (s.role !== p.role || s.id === p.staff) return false;
+      if (R.onLeave(s.id, p.date)) return false;
+      if (p.slot !== null) return R.restCheck(s.id, p.slot, r).ok;
+      return true;
+    }).map(function (s) {
+      var dayBusy = p.slot !== null && R.seatsOf(s.id, r).some(function (x) { return R.SLOTS[x.slot].date === p.date; });
+      return { s: s, h: R.hours(s.id, r), standby: !dayBusy, av: p.slot === null ? true : R.available(s.id, p.slot) };
+    }).filter(function (c) { return c.av; })
+      .sort(function (a, b) { return (b.standby - a.standby) || a.h - b.h || a.s.name.localeCompare(b.s.name); }).slice(0, 8);
+  }
+  function positionsPanel() {
+    var list = positions();
+    if (!list.length) return '<p class="muted">No unstaffed positions.</p>';
+    return list.map(function (p) {
+      var who = R.BY_ID[p.staff], open = !p.filledBy;
+      var html = '<article class="card pos' + (open ? ' open' : '') + '"><div class="page-head" style="margin:0"><div><h2>' + p.amb + ' · ' + p.role + '</h2><span class="muted">' + p.label + '</span></div>' +
+        (open ? '<span class="chip err">Unstaffed</span>' : '<span class="chip ok">' + W.ICONS.check + ' Stand-in: ' + R.staffName(p.filledBy) + '</span>') + '</div>' +
+        '<p style="margin:10px 0 0">' + p.why + ' by <strong>' + (who ? who.name : p.staff) + '</strong></p><p class="quote">' + W.esc(p.reason) + '</p>';
+      if (open && openPos !== p.key) html += '<div class="actions"><button class="btn primary" data-find="' + p.key + '">Find stand-in</button></div>';
+      if (open && openPos === p.key) {
+        var c = candidates(p);
+        html += '<h3>Stand-in candidates</h3><p class="hint">Same role, not on leave and at least 12 hours of rest around this shift. Staff off duty that day are listed first.</p>' +
+          (c.map(function (x) {
+            return '<div class="cand"><div><strong>' + x.s.name + '</strong> <span class="muted small">' + x.s.id + '</span><span class="meta">' + x.h + ' h this week · ' + x.s.base + (x.standby ? ' · Off duty that day (standby)' : '') + '</span></div>' +
+              '<button class="btn small" data-pick="' + x.s.id + '" data-pos="' + p.key + '">Select</button></div>';
+          }).join('') || '<p class="muted">No eligible staff.</p>') +
+          '<div class="actions" style="margin-top:10px"><button class="btn" data-close="1">Close</button></div>';
+      }
+      return html + '</article>';
+    }).join('');
+  }
+  function confirmStandIn(posKey, id) {
+    var p = positions().filter(function (x) { return x.key === posKey; })[0], s = R.BY_ID[id];
+    W.modal({ title: 'Confirm stand-in', html: '<p>Assign <strong>' + W.esc(s.name) + '</strong> (' + s.id + ') to ' + p.amb + ', ' + W.esc(p.label) + ' as ' + p.role + '?</p><p class="muted">' + W.esc(s.name) + ' will be notified straight away.</p>',
+      actions: [{ label: 'Cancel' }, { label: 'Confirm Stand-In Assignment', primary: true, onClick: function () {
+        if (p.slot !== null) {
+          var r = R.roster(), rc = R.restCheck(id, p.slot, r);
+          if (!rc.ok) { W.toast('Cannot assign: rest rule no longer met.'); return; }
+          r[p.slot][p.amb][p.seat || SEAT_KEY[p.role]] = id; R.saveRoster(r);
+        }
+        var f = filled(); f[p.key] = id; W.store.set('mgr.filled', f);
+        if (USERS[id]) W.notify('You have been assigned as a stand-in: ' + p.amb + ', ' + p.label + '.', USERS[id]);
+        W.audit('Stand-in assigned', p.amb + ' ' + p.label + ' – ' + p.role, 'Unstaffed', R.staffLabel(id));
+        openPos = null;
+        document.getElementById('flash').innerHTML = '<div class="banner ok" role="status">' + W.ICONS.check + '<p><strong>Stand-in assigned.</strong> ' + W.esc(s.name) + ' now covers ' + p.amb + ', ' + W.esc(p.label) + ' and has been notified.</p></div>';
+        render();
+      } }] });
+  }
+
+  /* ---------- Swap approvals (FR-22: receiver accepts first; Manager approval changes the assignments) ---------- */
+  function swapSeed() {
+    var s = W.store.get('mgr.swapSeed', null);
+    if (!s) { s = [{ id: 'SW-77', a: 'DRV-15', aSlot: 6, aAmb: 'AMB-03', b: 'DRV-09', bSlot: 5, bAmb: 'AMB-03', status: 'Accepted' }]; W.store.set('mgr.swapSeed', s); }
+    return s;
+  }
+  function swapsPanel() {
+    var cards = [];
+    var inc = W.store.get('incoming', null);
+    if (inc) {
+      var ready = /Accepted/.test(inc.status), done = /Approved|Rejected by Manager/.test(inc.status);
+      var mine = W.MY_SHIFTS.filter(function (x) { return x.id === inc.mine; })[0];
+      cards.push('<article class="card pos"><div class="page-head" style="margin:0"><h2>Nur Aisyah ↔ ' + W.esc(inc.from) + '</h2>' + statusChip(inc.status) + '</div>' +
+        '<div class="pair"><div><span class="lbl">Nur Aisyah gives</span><strong>' + W.esc(W.shiftLabel(mine)) + '</strong></div><div><span class="lbl">' + W.esc(inc.from) + ' gives</span><strong>' + W.esc(W.shiftLabel(inc.theirs)) + '</strong></div></div>' +
+        (ready && !done ? '<div class="actions"><button class="btn danger" data-sw="inc" data-ok="0">Reject</button><button class="btn primary" data-sw="inc" data-ok="1">Approve swap</button></div>' :
+          (!ready && !done ? '<p class="hint">Waiting for Nur Aisyah to accept. Swaps reach you only after both staff agree.</p>' : '')) + '</article>');
+    }
+    swapSeed().forEach(function (x) {
+      var A = R.BY_ID[x.a], B = R.BY_ID[x.b];
+      cards.push('<article class="card pos"><div class="page-head" style="margin:0"><h2>' + A.name + ' ↔ ' + B.name + '</h2>' + statusChip(x.status) + '</div>' +
+        '<div class="pair"><div><span class="lbl">' + A.name + ' gives</span><strong>' + R.slotLabel(x.aSlot) + ' · ' + x.aAmb + '</strong></div><div><span class="lbl">' + B.name + ' gives</span><strong>' + R.slotLabel(x.bSlot) + ' · ' + x.bAmb + '</strong></div></div>' +
+        (x.status === 'Accepted' ? '<div class="actions"><button class="btn danger" data-sw="' + x.id + '" data-ok="0">Reject</button><button class="btn primary" data-sw="' + x.id + '" data-ok="1">Approve swap</button></div>' : '') + '</article>');
+    });
+    return cards.join('') || '<p class="muted">No swap requests.</p>';
+  }
+  function statusChip(st) {
+    if (/Approved/.test(st)) return '<span class="chip ok">' + W.ICONS.check + ' Approved</span>';
+    if (/Rejected/.test(st)) return '<span class="chip err">Rejected</span>';
+    if (/Accepted/.test(st)) return '<span class="chip">' + W.ICONS.clock + ' Both agreed – needs approval</span>';
+    return '<span class="chip tentative">Waiting for staff</span>';
+  }
+  function decideSwap(id, ok) {
+    W.modal({ title: ok ? 'Approve this swap?' : 'Reject this swap?', html: '<p class="muted">' + (ok ? 'The two shift assignments will be exchanged and both staff notified.' : 'Both staff keep their current shifts and will be notified.') + '</p>',
+      actions: [{ label: 'Cancel' }, { label: ok ? 'Approve swap' : 'Reject swap', primary: true, danger: !ok, onClick: function () {
+        var msg;
+        if (id === 'inc') {
+          var inc = W.store.get('incoming', null); inc.status = ok ? 'Approved by Manager' : 'Rejected by Manager'; W.store.set('incoming', inc);
+          W.notify('Your swap with ' + inc.from + ' was ' + (ok ? 'approved. Your schedule has been updated.' : 'rejected. Your shift is unchanged.'), 'nur.aisyah');
+          W.audit(ok ? 'Swap approved' : 'Swap rejected', 'Nur Aisyah ↔ ' + inc.from, 'Accepted by both', ok ? 'Assignments exchanged' : 'Unchanged');
+          msg = 'Nur Aisyah ↔ ' + inc.from;
+        } else {
+          var list = swapSeed(), x = list.filter(function (s) { return s.id === id; })[0];
+          if (ok) {
+            var r = R.roster(), A = r[x.aSlot][x.aAmb], B = r[x.bSlot][x.bAmb];
+            A.driver = x.b; B.driver = x.a;
+            if (!R.restCheck(x.a, x.bSlot, (function () { var t = JSON.parse(JSON.stringify(r)); t[x.bSlot][x.bAmb].driver = null; return t; })()).ok) { W.toast('Cannot approve: rest rule would be broken.'); return; }
+            R.saveRoster(r);
+          }
+          x.status = ok ? 'Approved' : 'Rejected'; W.store.set('mgr.swapSeed', list);
+          W.audit(ok ? 'Swap approved' : 'Swap rejected', R.staffName(x.a) + ' ↔ ' + R.staffName(x.b), 'Accepted by both', ok ? 'Assignments exchanged' : 'Unchanged');
+          msg = R.staffName(x.a) + ' ↔ ' + R.staffName(x.b);
+        }
+        document.getElementById('flash').innerHTML = '<div class="banner ok" role="status">' + W.ICONS.check + '<p><strong>Swap ' + (ok ? 'approved' : 'rejected') + '.</strong> ' + W.esc(msg) + (ok ? ': the assignments have been exchanged' : ': no change') + '. Both staff have been notified.</p></div>';
+        render();
+      } }] });
+  }
+
+  function render() {
+    var open = positions().filter(function (p) { return !p.filledBy; }).length;
+    var T = [['positions', 'Unstaffed positions (' + open + ')'], ['swaps', 'Swap approvals']];
+    var t = document.getElementById('tabs');
+    t.innerHTML = T.map(function (x) { return '<button role="tab" aria-selected="' + (x[0] === tab) + '" data-t="' + x[0] + '">' + x[1] + '</button>'; }).join('');
+    t.querySelectorAll('[data-t]').forEach(function (b) { b.addEventListener('click', function () { tab = b.getAttribute('data-t'); openPos = null; render(); }); });
+    var p = document.getElementById('panel');
+    p.innerHTML = tab === 'positions' ? positionsPanel() : swapsPanel();
+    p.querySelectorAll('[data-find]').forEach(function (b) { b.addEventListener('click', function () { openPos = b.getAttribute('data-find'); render(); }); });
+    p.querySelectorAll('[data-close]').forEach(function (b) { b.addEventListener('click', function () { openPos = null; render(); }); });
+    p.querySelectorAll('[data-pick]').forEach(function (b) { b.addEventListener('click', function () { confirmStandIn(b.getAttribute('data-pos'), b.getAttribute('data-pick')); }); });
+    p.querySelectorAll('[data-sw]').forEach(function (b) { b.addEventListener('click', function () { decideSwap(b.getAttribute('data-sw'), b.getAttribute('data-ok') === '1'); }); });
+  }
+  if (new URLSearchParams(location.search).get('tab') === 'swaps') tab = 'swaps';
+  render();
+  W.controls([{ label: 'Reset stand-ins and swaps', onClick: function () { W.store.set('mgr.filled', {}); W.store.set('mgr.swapSeed', null); W.store.set('roster.0712', null); W.store.set('mgr.rejections', null); render(); } }]);
+})();
+</script>
+</body>
+</html>

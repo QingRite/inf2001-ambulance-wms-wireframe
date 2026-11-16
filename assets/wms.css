@@ -129,7 +129,7 @@ input[type="file"] { font: inherit; padding: 10px; border: 1.5px dashed var(--mu
 .modal .actions { margin-top: 20px; }
 
 /* ---------- Tables ---------- */
-.table-wrap { overflow-x: auto; border: 1.5px solid var(--line); border-radius: var(--r); }
+.table-wrap { position: relative; overflow-x: auto; border: 1.5px solid var(--line); border-radius: var(--r); }
 table { border-collapse: collapse; width: 100%; }
 th, td { border-bottom: 1px solid var(--line-2); padding: 10px 12px; text-align: left; vertical-align: top; }
 th { background: var(--fill-2); font-size: 14px; }

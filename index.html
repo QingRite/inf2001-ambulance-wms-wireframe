@@ -43,7 +43,7 @@
     if (!p.value) { W.setError(p, 'Enter your password.'); bad = true; }
     if (bad) { (form.querySelector('[aria-invalid]') || u).focus(); return; }
     var key = u.value.trim().toLowerCase(), who = W.PERSONAS[key];
-    if (who && who.deactivated) {
+    if (who && W.isDeactivated(key)) {
       W.summary(form, 'This account has been deactivated. Contact your IT Administrator.');
       p.value = ''; return;
     }
@@ -64,7 +64,7 @@
   inner.insertAdjacentHTML('beforeend',
     '<p class="small muted" style="margin:12px 0 6px">Demo accounts – password for all: <strong>' + W.PASSWORD + '</strong>. Click a username to fill the form.</p>' +
     '<table class="accounts"><thead><tr><th>Username</th><th>Role</th></tr></thead><tbody>' + rows + '</tbody></table>' +
-    '<p class="small muted" style="margin:8px 0 0">Any other password shows the login-failed state. Manager and IT Administrator land on placeholder pages for teammates to build.</p>');
+    '<p class="small muted" style="margin:8px 0 0">Any other password shows the login-failed state. </p>');
   inner.querySelectorAll('[data-u]').forEach(function (b) {
     b.addEventListener('click', function () { u.value = b.getAttribute('data-u'); p.value = W.PASSWORD; u.focus(); });
   });

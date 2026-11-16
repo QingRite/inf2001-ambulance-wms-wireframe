@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Accounts – WMS</title>
+<link rel="stylesheet" href="assets/wms.css">
+<style>
+  .filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 12px; }
+  .filters .field { margin: 0; min-width: 190px; }
+  .restricted { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px 12px; border: 1.5px dashed var(--muted); border-radius: var(--r); color: var(--muted); background: var(--fill-2); font-size: 14px; }
+  .perm-list { margin: 0; padding-left: 18px; font-size: 14px; }
+</style>
+</head>
+<body data-group="admin" data-active="admin-accounts">
+<main id="main">
+  <!-- Fig 5.8.1 Account list, 5.8.2 Create account, 5.8.3 Account created (FR-28), 5.8.4 Edit account (FR-29, FR-42),
+       5.8.5 Deactivate prompt, 5.8.6 Deactivation blocked (BR-02), 5.8.7 Account deactivated (FR-43). UC-17. -->
+  <div class="page-head">
+    <div><h1>Accounts</h1><p class="sub">Create, edit and deactivate user accounts. Roles and their permissions are managed in Roles &amp; Permissions.</p></div>
+    <button class="btn primary" id="create" type="button">Create account</button>
+  </div>
+  <div id="flash"></div>
+  <div class="filters">
+    <div class="field"><label for="q">Search name or username</label><input type="text" id="q"></div>
+    <div class="field"><label for="role">Role</label><select id="role"><option value="">All roles</option></select></div>
+    <div class="field"><label for="status">Status</label><select id="status"><option value="">All</option><option>Active</option><option>Deactivated</option></select></div>
+  </div>
+  <div class="table-wrap"><table><thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody id="rows"></tbody></table></div>
+  <div class="actions left" style="margin-top:10px"><span class="muted small" id="count"></span><button class="btn small" id="more" type="button"></button></div>
+</main>
+<script src="assets/wms.js"></script>
+<script src="assets/wms-roster.js"></script>
+<script>
+(function () {
+  var W = WMS, R = W.R, me = W.currentUser(), showAll = false;
+  document.getElementById('role').insertAdjacentHTML('beforeend', R.ROLES.map(function (r) { return '<option>' + r + '</option>'; }).join(''));
+  var PNAME = {}; R.PERMS.forEach(function (p) { PNAME[p[0]] = p[1]; });
+  function permList(role) { return '<ul class="perm-list">' + (R.rolePerms()[role] || []).map(function (k) { return '<li>' + PNAME[k] + '</li>'; }).join('') + '</ul>'; }
+  function flash(kind, html) { document.getElementById('flash').innerHTML = '<div class="banner ' + kind + '" role="' + (kind === 'err' ? 'alert' : 'status') + '">' + W.ICONS[kind === 'err' ? 'alert' : 'check'] + '<p>' + html + '</p></div>'; }
+
+  function render() {
+    var q = document.getElementById('q').value.trim().toLowerCase(), role = document.getElementById('role').value, st = document.getElementById('status').value;
+    var list = R.accounts().filter(function (a) { return (!role || a.role === role) && (!st || a.status === st) && (!q || (a.name + ' ' + a.username).toLowerCase().indexOf(q) >= 0); })
+      .sort(function (a, b) { return a.name.localeCompare(b.name); });
+    var shown = showAll ? list : list.slice(0, 20);
+    document.getElementById('rows').innerHTML = shown.map(function (a) {
+      var active = a.status === 'Active';
+      return '<tr><td><strong>' + W.esc(a.name) + '</strong><span class="small muted" style="display:block">' + a.staffId + '</span></td><td>' + a.username + '</td><td>' + a.role + '</td>' +
+        '<td>' + (active ? '<span class="chip ok">Active</span>' : '<span class="chip muted">Deactivated</span>') + '</td>' +
+        '<td><div class="actions" style="justify-content:flex-start"><button class="btn small" data-edit="' + a.username + '">Edit</button>' +
+        (active ? '<button class="btn small danger" data-deact="' + a.username + '">Deactivate</button>' : '') + '</div></td></tr>';
+    }).join('') || '<tr><td colspan="5" class="muted">No accounts match.</td></tr>';
+    document.getElementById('count').textContent = 'Showing ' + shown.length + ' of ' + list.length + ' accounts';
+    var more = document.getElementById('more'); more.style.display = list.length > 20 ? '' : 'none'; more.textContent = showAll ? 'Show first 20' : 'Show all ' + list.length;
+    document.querySelectorAll('[data-edit]').forEach(function (b) { b.addEventListener('click', function () { edit(b.getAttribute('data-edit')); }); });
+    document.querySelectorAll('[data-deact]').forEach(function (b) { b.addEventListener('click', function () { deactivate(b.getAttribute('data-deact')); }); });
+  }
+
+  function formHtml(a) {
+    var roles = R.ROLES.map(function (r) { return '<option' + (a && a.role === r ? ' selected' : '') + '>' + r + '</option>'; }).join('');
+    return '<p class="hint" style="margin-top:0">Fields marked * are required.</p><div class="form-summary"></div>' +
+      '<div class="field"><label for="f-name">Full name<span class="req" aria-hidden="true">*</span></label><input type="text" id="f-name" value="' + (a ? W.esc(a.name) : '') + '"></div>' +
+      '<div class="field"><label for="f-user">Username<span class="req" aria-hidden="true">*</span></label><input type="text" id="f-user" value="' + (a ? a.username : '') + '"' + (a ? ' disabled' : '') + '><p class="hint">Lowercase letters and dots, e.g. mei.ling.tan</p></div>' +
+      '<div class="field"><label for="f-email">Work email<span class="req" aria-hidden="true">*</span></label><input type="text" id="f-email" value="' + (a ? a.email : '') + '"></div>' +
+      '<div class="field"><label for="f-role">Role<span class="req" aria-hidden="true">*</span></label><select id="f-role"><option value="">Select a role</option>' + roles + '</select></div>' +
+      '<div class="field"><span class="label">Permissions for this role</span><div id="f-perms">' + (a ? permList(a.role) : '<p class="hint">Select a role to see its permissions.</p>') + '</div></div>';
+  }
+  function bindRole(o) { var s = o.querySelector('#f-role'); s.addEventListener('change', function () { o.querySelector('#f-perms').innerHTML = s.value ? permList(s.value) : ''; }); }
+  function validate(o, isNew) {
+    W.clearErrors(o);
+    var n = o.querySelector('#f-name'), u = o.querySelector('#f-user'), e = o.querySelector('#f-email'), r = o.querySelector('#f-role');
+    if (!n.value.trim()) W.setError(n, 'Enter the full name.');
+    if (isNew) {
+      if (!u.value.trim()) W.setError(u, 'Enter a username.');
+      else if (!/^[a-z]+(\.[a-z]+)*$/.test(u.value.trim())) W.setError(u, 'Use lowercase letters separated by dots only.');
+      else if (R.accounts().some(function (x) { return x.username === u.value.trim(); })) W.setError(u, 'This username is already taken. Try adding a middle name.');
+    }
+    if (!e.value.trim()) W.setError(e, 'Enter a work email.');
+    else if (!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(e.value.trim())) W.setError(e, 'Enter an email like name@hospital.example.');
+    if (!r.value) W.setError(r, 'Select a role.');
+    if (o.querySelector('[aria-invalid]')) { W.summary(o, 'Account not saved. Fix the fields marked below.'); o.querySelector('[aria-invalid]').focus(); return false; }
+    return true;
+  }
+
+  /* FR-28: create account with role and permissions */
+  document.getElementById('create').addEventListener('click', function () {
+    W.modal({ title: 'Create account', html: formHtml(null), onOpen: bindRole, actions: [{ label: 'Cancel' }, { label: 'Create account', primary: true, onClick: function (o) {
+      if (!validate(o, true)) return true;
+      var a = { username: o.querySelector('#f-user').value.trim(), name: o.querySelector('#f-name').value.trim(), role: o.querySelector('#f-role').value, staffId: 'NEW-' + (R.accounts().length + 1), status: 'Active', email: o.querySelector('#f-email').value.trim(), created: W.TODAY };
+      var list = R.accounts(); list.push(a); R.saveAccounts(list);
+      W.audit('Account created', a.name + ' (' + a.username + ')', '–', a.role);
+      setTimeout(function () {
+        W.modal({ title: 'Account created!', html: '<p><strong>' + W.esc(a.name) + '</strong> can now log in as <strong>' + a.username + '</strong> with the role ' + a.role + '.</p><p class="muted">A one-time password has been sent to ' + W.esc(a.email) + '.</p>', actions: [{ label: 'OK', primary: true }] });
+      }, 0);
+      render();
+    } }] });
+  });
+
+  /* FR-29 update; FR-42 confidential fields withheld from IT Administrators */
+  function edit(username) {
+    var a = R.accounts().filter(function (x) { return x.username === username; })[0];
+    var restricted = '<div class="field"><span class="label">Contact number</span><div class="restricted">' + W.ICONS.lock + ' Restricted – Manager access only</div></div>' +
+      '<div class="field"><span class="label">Home address</span><div class="restricted">' + W.ICONS.lock + ' Restricted – Manager access only</div></div>' +
+      '<div class="field"><span class="label">Medical certificates and leave reasons</span><div class="restricted">' + W.ICONS.lock + ' Restricted – Manager access only</div></div>';
+    W.modal({ title: 'Edit account – ' + a.name, html: formHtml(a) + restricted, onOpen: bindRole, actions: [{ label: 'Cancel' }, { label: 'Save changes', primary: true, onClick: function (o) {
+      if (!validate(o, false)) return true;
+      if (a.username === me.key && o.querySelector('#f-role').value !== a.role) { W.setError(o.querySelector('#f-role'), 'You cannot change your own role.'); return true; }
+      var list = R.accounts(), x = list.filter(function (y) { return y.username === username; })[0], prevRole = x.role;
+      x.name = o.querySelector('#f-name').value.trim(); x.email = o.querySelector('#f-email').value.trim(); x.role = o.querySelector('#f-role').value;
+      R.saveAccounts(list);
+      W.audit(prevRole !== x.role ? 'Role changed' : 'Account updated', x.name + ' (' + x.username + ')', prevRole, x.role);
+      flash('ok', '<strong>Account updated.</strong> ' + W.esc(x.name) + (prevRole !== x.role ? ' is now ' + x.role + '.' : '.'));
+      render();
+    } }] });
+  }
+
+  /* FR-43 + BR-02: deactivate, unless on an ongoing shift or confirmed stand-in */
+  function deactivate(username) {
+    var a = R.accounts().filter(function (x) { return x.username === username; })[0];
+    if (a.username === me.key) { flash('err', '<strong>You cannot deactivate your own account.</strong>'); return; }
+    W.modal({ title: 'Deactivate ' + a.name + "'s account?", html: '<p>' + W.esc(a.name) + ' will no longer be able to log in. Their records are kept.</p>',
+      actions: [{ label: 'Cancel' }, { label: 'Deactivate', primary: true, danger: true, onClick: function () {
+        var duty = R.activeDuty(a.staffId);
+        if (duty) {
+          flash('err', '<strong>Cannot deactivate ' + W.esc(a.name) + '.</strong> They ' + duty + '. Ask the Manager to reassign their shifts first.');
+          return;
+        }
+        var list = R.accounts(); list.filter(function (y) { return y.username === username; })[0].status = 'Deactivated'; R.saveAccounts(list);
+        W.audit('Account deactivated', a.name + ' (' + a.username + ')', 'Active', 'Deactivated');
+        flash('ok', '<strong>Account deactivated.</strong> ' + W.esc(a.name) + ' can no longer log in.');
+        render();
+      } }] });
+  }
+
+  ['role', 'status'].forEach(function (id) { document.getElementById(id).addEventListener('change', render); });
+  document.getElementById('q').addEventListener('input', render);
+  document.getElementById('more').addEventListener('click', function () { showAll = !showAll; render(); });
+  render();
+  W.controls([
+    { label: 'Try deactivating Nur Aisyah (on duty)', onClick: function () { document.getElementById('q').value = 'nur.aisyah'; render(); deactivate('nur.aisyah'); } },
+    { label: 'Reset accounts', onClick: function () { W.store.set('accounts', null); render(); } }
+  ]);
+})();
+</script>
+</body>
+</html>

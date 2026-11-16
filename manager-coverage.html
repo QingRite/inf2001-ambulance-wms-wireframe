@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Coverage – WMS</title>
+<link rel="stylesheet" href="assets/wms.css">
+<style>
+  .slotcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .slotcard.short { border: 2px solid var(--err); }
+  .slotcard .big { font-size: 30px; font-weight: 800; }
+  .gap-row td { color: var(--err); font-weight: 600; background: var(--err-bg); }
+</style>
+</head>
+<body data-group="manager" data-active="manager-coverage">
+<main id="main">
+  <!-- Staffing coverage by date (FR-05, FR-06), Fig 5.2.6 Daily duty view (FR-34). UC-11. -->
+  <div class="page-head">
+    <div><h1>Coverage</h1><p class="sub">Who is on duty on a date, and whether each 12-hour slot has at least 6 fully staffed ambulances.</p></div>
+  </div>
+  <div class="tabs" role="tablist" id="days" aria-label="Date"></div>
+  <div class="slotcards" id="slotcards"></div>
+
+  <section aria-labelledby="duty-h">
+    <div class="page-head" style="margin-bottom:10px">
+      <h2 id="duty-h" style="margin:0"></h2>
+      <div class="field" style="margin:0;min-width:200px"><label for="role">Role</label><select id="role"><option value="">All roles</option><option>Paramedic</option><option>Care Assistant</option><option>Driver</option></select></div>
+    </div>
+    <div class="table-wrap"><table><thead><tr><th>Staff</th><th>Role</th><th>Slot</th><th>Ambulance</th><th>Status</th><th>Base location</th><th>Jobs assigned</th></tr></thead><tbody id="duty"></tbody></table></div>
+  </section>
+</main>
+<script src="assets/wms.js"></script>
+<script src="assets/wms-roster.js"></script>
+<script>
+(function () {
+  var W = WMS, R = W.R;
+  var day = +(new URLSearchParams(location.search).get('day') || 0);
+  function render() {
+    var r = R.roster(), date = R.SLOTS[day * 2].date;
+    var d = document.getElementById('days');
+    d.innerHTML = [0, 1, 2, 3, 4, 5, 6].map(function (k) {
+      var low = R.fullCount(k * 2, r) < 6 || R.fullCount(k * 2 + 1, r) < 6;
+      return '<button role="tab" aria-selected="' + (k === day) + '" data-d="' + k + '">' + W.fmtDate(R.SLOTS[k * 2].date) + '<span class="small">' + (low ? 'Below minimum' : 'Covered') + '</span></button>';
+    }).join('');
+    d.querySelectorAll('[data-d]').forEach(function (b) { b.addEventListener('click', function () { day = +b.getAttribute('data-d'); render(); }); });
+
+    document.getElementById('slotcards').innerHTML = [day * 2, day * 2 + 1].map(function (i) {
+      var f = R.fullCount(i, r), short = f < 6;
+      var inc = R.AMBS.filter(function (a) { return R.ambStatus(r[i][a]) === 'Crew incomplete'; });
+      return '<div class="card slotcard' + (short ? ' short' : '') + '"><h2 style="margin:0">' + R.SLOTS[i].slot + ' ' + W.SLOT_TIME[R.SLOTS[i].slot] + '</h2>' +
+        '<p style="margin:6px 0"><span class="big">' + f + '</span> <span class="muted">of 6 fully staffed ambulances</span></p>' +
+        (short ? '<span class="chip err">' + W.ICONS.alert.replace('width="18" height="18"', 'width="13" height="13"') + ' Below minimum</span>' : '<span class="chip ok">' + W.ICONS.check + ' Meets minimum</span>') +
+        (inc.length ? '<ul style="margin:10px 0 0;padding-left:18px">' + inc.map(function (a) { return '<li>' + a + ': missing ' + R.missing(r[i][a]).join(', ') + '</li>'; }).join('') + '</ul>' : '') +
+        (short ? '<p style="margin:10px 0 0"><a href="manager-allocation.html?slot=' + i + '">Open in Allocation</a></p>' : '') + '</div>';
+    }).join('');
+
+    document.getElementById('duty-h').textContent = 'On duty – ' + W.fmtDate(date, { year: true });
+    var role = document.getElementById('role').value, rows = [];
+    [day * 2, day * 2 + 1].forEach(function (i) {
+      R.AMBS.forEach(function (a) {
+        R.SEATS.forEach(function (se) {
+          var id = r[i][a][se[0]];
+          if (role && se[1] !== role) return;
+          if (id) { var s = R.BY_ID[id]; rows.push('<tr><td><strong>' + s.name + '</strong><span class="small muted" style="display:block">' + id + '</span></td><td>' + s.role + '</td><td>' + R.SLOTS[i].slot + '</td><td>' + a + '</td><td><span class="chip ok">On duty</span></td><td>' + R.BASES[a] + '</td><td>' + R.jobs(id, date) + '</td></tr>'); }
+          else if (R.crewCount(r[i][a]) > 0) rows.push('<tr class="gap-row"><td>Unstaffed seat</td><td>' + se[1] + '</td><td>' + R.SLOTS[i].slot + '</td><td>' + a + '</td><td>Unstaffed</td><td>' + R.BASES[a] + '</td><td>–</td></tr>');
+        });
+      });
+    });
+    R.leaves().filter(function (l) { return date >= l.start && date <= l.end && R.BY_ID[l.staff]; }).forEach(function (l) {
+      var s = R.BY_ID[l.staff]; if (role && s.role !== role) return;
+      rows.push('<tr><td><strong>' + s.name + '</strong><span class="small muted" style="display:block">' + s.id + '</span></td><td>' + s.role + '</td><td>–</td><td>–</td><td><span class="chip muted">On leave</span></td><td>' + s.base + '</td><td>0</td></tr>');
+    });
+    document.getElementById('duty').innerHTML = rows.join('') || '<tr><td colspan="7" class="muted">No staff match.</td></tr>';
+  }
+  document.getElementById('role').addEventListener('change', render);
+  render();
+  W.controls([]);
+})();
+</script>
+</body>
+</html>

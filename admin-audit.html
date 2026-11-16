@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Audit Log – WMS</title>
+<link rel="stylesheet" href="assets/wms.css">
+<style>
+  .filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 12px; }
+  .filters .field { margin: 0; min-width: 200px; }
+  td { font-size: 14px; }
+</style>
+</head>
+<body data-group="admin" data-active="admin-audit">
+<main id="main">
+  <!-- Fig 5.9.3 Audit log (optional) (FR-32, NFR-16). Read-only. Confidential values hidden from IT Administrators (FR-42). -->
+  <h1>Audit Log</h1>
+  <p class="sub">Every committed roster, swap, absence, stand-in and account change. Entries are read-only and cannot be edited or deleted.</p>
+  <div class="banner">
+    <span id="lock"></span><p>Read-only record. Leave details and other confidential values are shown as "Restricted" to IT Administrators.</p>
+  </div>
+  <div class="filters">
+    <div class="field"><label for="act">Action</label><select id="act"><option value="">All actions</option></select></div>
+    <div class="field"><label for="q">Search user or record</label><input type="text" id="q"></div>
+  </div>
+  <div class="table-wrap"><table><thead><tr><th>Time</th><th>Acting user</th><th>IP address</th><th>Action</th><th>Record</th><th>Previous value</th><th>New value</th></tr></thead><tbody id="rows"></tbody></table></div>
+  <p class="muted small" id="count" style="margin-top:8px"></p>
+</main>
+<script src="assets/wms.js"></script>
+<script src="assets/wms-roster.js"></script>
+<script>
+(function () {
+  var W = WMS;
+  document.getElementById('lock').innerHTML = W.ICONS.lock;
+  var CONF = ['Absence recorded'];
+  function list() { return W.store.get('audit', null) || W.seedAudit(); }
+  var acts = {}; list().forEach(function (e) { acts[e.action] = 1; });
+  document.getElementById('act').insertAdjacentHTML('beforeend', Object.keys(acts).sort().map(function (a) { return '<option>' + a + '</option>'; }).join(''));
+  function stamp(ts) {
+    var d = new Date(ts), p = function (n) { return String(n).padStart(2, '0'); };
+    return p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+  }
+  function render() {
+    var a = document.getElementById('act').value, q = document.getElementById('q').value.trim().toLowerCase();
+    var rows = list().filter(function (e) { return (!a || e.action === a) && (!q || (e.user + ' ' + e.target).toLowerCase().indexOf(q) >= 0); });
+    document.getElementById('rows').innerHTML = rows.map(function (e) {
+      var conf = CONF.indexOf(e.action) >= 0;
+      return '<tr><td style="white-space:nowrap">' + stamp(e.ts) + '</td><td>' + W.esc(e.user) + '</td><td>' + e.ip + '</td><td>' + W.esc(e.action) + '</td><td>' + W.esc(e.target) + '</td>' +
+        '<td>' + (conf && e.prev !== '–' ? '<span class="chip muted">Restricted</span>' : W.esc(e.prev)) + '</td><td>' + (conf ? '<span class="chip muted">Restricted</span>' : W.esc(e.next)) + '</td></tr>';
+    }).join('') || '<tr><td colspan="7" class="muted">No entries match.</td></tr>';
+    document.getElementById('count').textContent = rows.length + ' entries, newest first.';
+  }
+  document.getElementById('act').addEventListener('change', render);
+  document.getElementById('q').addEventListener('input', render);
+  render();
+  W.controls([]);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Timetable – WMS</title>
+<link rel="stylesheet" href="assets/wms.css">
+<style>
+  .tt td, .tt th { font-size: 13px; white-space: nowrap; }
+  .tt td .s { display: block; font-weight: 600; }
+  .lv { display: inline-block; border: 1.5px dashed var(--ink); border-radius: 4px; padding: 1px 6px; font-weight: 600; }
+  .filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 12px; }
+  .filters .field { margin: 0; min-width: 200px; }
+</style>
+</head>
+<body data-group="manager" data-active="manager-timetable">
+<main id="main">
+  <!-- Fig 5.2.4 Central weekly timetable – Manager view (FR-33). UC-11.
+       Staff see the same timetable without leave categories (staff-schedule.html, Team this week). -->
+  <div class="page-head">
+    <div><h1>Timetable</h1><p class="sub">Everyone's shifts and status for 07 – 13 Dec 2026. As Manager you see the approved leave category; staff see only "On Leave".</p></div>
+  </div>
+  <div class="filters">
+    <div class="field"><label for="q">Search name or ID</label><input type="text" id="q"></div>
+    <div class="field"><label for="role">Role</label><select id="role"><option value="">All roles</option><option>Paramedic</option><option>Care Assistant</option><option>Driver</option></select></div>
+    <div class="field"><label for="show">Show</label><select id="show"><option value="all">All staff</option><option value="leave">Staff with leave this week</option></select></div>
+  </div>
+  <div class="table-wrap"><table class="tt"><thead id="head"></thead><tbody id="body"></tbody></table></div>
+  <p class="muted small" id="count" style="margin-top:8px"></p>
+</main>
+<script src="assets/wms.js"></script>
+<script src="assets/wms-roster.js"></script>
+<script>
+(function () {
+  var W = WMS, R = W.R;
+  var h = '<tr><th scope="col">Staff</th>';
+  for (var d = 0; d < 7; d++) h += '<th scope="col">' + W.fmtDate(R.SLOTS[d * 2].date) + '</th>';
+  document.getElementById('head').innerHTML = h + '<th scope="col">Hours</th></tr>';
+  function render() {
+    var r = R.roster(), q = document.getElementById('q').value.trim().toLowerCase(), role = document.getElementById('role').value, show = document.getElementById('show').value;
+    var rows = R.STAFF.filter(function (s) {
+      if (role && s.role !== role) return false;
+      if (q && (s.name + ' ' + s.id).toLowerCase().indexOf(q) < 0) return false;
+      if (show === 'leave') { for (var d = 0; d < 7; d++) if (R.onLeave(s.id, R.SLOTS[d * 2].date)) return true; return false; }
+      return true;
+    });
+    document.getElementById('body').innerHTML = rows.map(function (s) {
+      var seats = R.seatsOf(s.id, r), cells = '';
+      for (var d = 0; d < 7; d++) {
+        var date = R.SLOTS[d * 2].date, lv = R.onLeave(s.id, date);
+        var on = seats.filter(function (x) { return Math.floor(x.slot / 2) === d; });
+        if (lv) cells += '<td><span class="lv">' + lv.cat + '</span></td>';
+        else if (on.length) cells += '<td>' + on.map(function (x) { return '<span class="s">' + R.SLOTS[x.slot].slot + '</span><span class="muted">' + x.amb + '</span>'; }).join('') + '</td>';
+        else cells += '<td class="muted">–</td>';
+      }
+      return '<tr><th scope="row">' + s.name + '<span class="small muted" style="display:block;font-weight:400">' + s.role + ' · ' + s.id + '</span></th>' + cells + '<td>' + seats.length * 12 + ' h</td></tr>';
+    }).join('') || '<tr><td colspan="9" class="muted">No staff match.</td></tr>';
+    document.getElementById('count').textContent = rows.length + ' staff shown. Day 08:00–20:00, Night 20:00–08:00.';
+  }
+  ['role', 'show'].forEach(function (id) { document.getElementById(id).addEventListener('change', render); });
+  document.getElementById('q').addEventListener('input', render);
+  render();
+  W.controls([]);
+})();
+</script>
+</body>
+</html>

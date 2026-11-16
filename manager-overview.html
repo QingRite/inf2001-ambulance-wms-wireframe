@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Overview – WMS</title>
+<link rel="stylesheet" href="assets/wms.css">
+<style>
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .kpi .big { font-size: 32px; font-weight: 800; line-height: 1.1; display: block; }
+  .ambs { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+  .amb { border: 1.5px solid var(--line); border-radius: var(--r); padding: 10px 12px; font-size: 14px; }
+  .amb.flag { border: 2px solid var(--err); }
+  .amb h3 { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin: 0 0 6px; font-size: 15px; }
+  .amb ul { list-style: none; margin: 6px 0; padding: 0; }
+  .amb .miss { color: var(--err); font-weight: 600; font-size: 13px; }
+  .hbar { display: inline-block; width: 120px; height: 10px; background: var(--fill); border: 1px solid var(--line); border-radius: 3px; vertical-align: middle; margin-right: 8px; overflow: hidden; }
+  .hbar span { display: block; height: 100%; background: var(--muted); }
+  .filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 12px; }
+  .filters .field { margin: 0; min-width: 200px; }
+  ol.low { margin: 0; padding-left: 22px; }
+  ol.low li { margin-bottom: 8px; }
+</style>
+</head>
+<body data-group="manager" data-active="manager-overview">
+<main id="main">
+  <!-- Fig 5.1.4 Weekly hours (FR-02, FR-03, FR-04), 5.1.5 Ambulance status (FR-05), 5.1.6 Minimum staffing alert (FR-06). UC-11. -->
+  <div class="page-head">
+    <div><h1>Overview</h1><p class="sub">Workload and ambulance staffing for the selected week.</p></div>
+    <div class="field" style="margin:0;min-width:240px"><label for="week">Week (Mon – Sun)</label>
+      <select id="week"><option value="draft">07 – 13 Dec 2026 · Draft</option><option value="pub">30 Nov – 06 Dec 2026 · Published</option></select></div>
+  </div>
+  <div id="alert"></div>
+  <div class="kpis" id="kpis"></div>
+
+  <div class="row">
+    <section class="col-side card" aria-labelledby="low-h">
+      <h2 id="low-h">Lowest hours this week</h2>
+      <p class="hint" style="margin:-6px 0 12px">The three staff with the fewest assigned hours, lowest first, then by name. Consider them first when allocating.</p>
+      <ol class="low" id="low"></ol>
+    </section>
+    <section class="col-main card" aria-labelledby="amb-h">
+      <div class="page-head" style="margin-bottom:12px">
+        <h2 id="amb-h" style="margin:0">Ambulances</h2>
+        <div class="field" style="margin:0;min-width:220px"><label for="slot">Shift slot</label><select id="slot"></select></div>
+      </div>
+      <div class="ambs" id="ambs"></div>
+      <p class="hint" style="margin-top:10px">Utilization = share of this week's 14 slots in which the ambulance has a full crew (1 Driver, 1 Care Assistant, 2 Paramedics).</p>
+    </section>
+  </div>
+
+  <section class="section" aria-labelledby="hrs-h">
+    <h2 id="hrs-h">Weekly hours – all operational staff</h2>
+    <div class="filters">
+      <div class="field"><label for="q">Search name or ID</label><input type="text" id="q" placeholder="e.g. Siti or PM-13"></div>
+      <div class="field"><label for="role">Role</label><select id="role"><option value="">All roles</option><option>Paramedic</option><option>Care Assistant</option><option>Driver</option></select></div>
+      <div class="field"><label for="sort">Sort by</label><select id="sort"><option value="hours">Hours, highest first</option><option value="name">Name</option></select></div>
+    </div>
+    <div class="table-wrap"><table><thead><tr><th>Staff</th><th>Role</th><th>Base</th><th>Assigned hours</th><th>Warning</th><th><span class="sr-only">Action</span></th></tr></thead><tbody id="hours"></tbody></table></div>
+    <div class="actions left" style="margin-top:10px"><span class="muted small" id="count"></span><button class="btn small" id="more" type="button"></button></div>
+  </section>
+</main>
+<script src="assets/wms.js"></script>
+<script src="assets/wms-roster.js"></script>
+<script>
+(function () {
+  var W = WMS, R = W.R, showAll = false;
+  var slotSel = document.getElementById('slot');
+  slotSel.innerHTML = R.SLOTS.map(function (s) { return '<option value="' + s.i + '">' + R.slotLabel(s.i) + '</option>'; }).join('');
+  function data() {
+    if (document.getElementById('week').value === 'draft') return R.roster();
+    var r = R.generate(); r[0]['AMB-06'].pm2 = 'PM-12'; return r;     // last week's published roster (no gaps)
+  }
+  function render() {
+    var r = data(), draft = document.getElementById('week').value === 'draft';
+    var short = R.shortSlots(r);
+    document.getElementById('alert').innerHTML = short.length ? '<div class="banner err" role="alert">' + W.ICONS.alert + '<div><p><strong>Fewer than six fully staffed ambulances in service.</strong></p><ul style="margin:6px 0 8px;padding-left:20px">' +
+      short.map(function (s) { return '<li>' + R.slotLabel(s.i) + ': ' + s.full + ' of 6</li>'; }).join('') +
+      '</ul><p><a href="manager-allocation.html?slot=' + short[0].i + '">Fix in Allocation</a> · <a href="manager-swaps.html">Find a stand-in</a></p></div></div>' : '';
+    var withHours = R.STAFF.map(function (s) { return { s: s, h: R.hours(s.id, r) }; });
+    var over = withHours.filter(function (x) { return x.h > 40; }).length;
+    var i = +slotSel.value, incomplete = R.AMBS.filter(function (a) { return R.ambStatus(r[i][a]) === 'Crew incomplete'; }).length;
+    document.getElementById('kpis').innerHTML = [
+      ['Operational staff', R.STAFF.length, 'with ' + withHours.reduce(function (a, b) { return a + b.h; }, 0) + ' h assigned'],
+      ['Over 40 hours', over, over ? 'warning only, allocation not blocked' : 'none this week'],
+      ['Slots below minimum', short.length + ' of 14', 'needs 6 fully staffed ambulances'],
+      ['Incomplete crews', incomplete, 'in ' + R.slotLabel(i, true)]
+    ].map(function (k) { return '<div class="card kpi"><span class="muted small">' + k[0] + '</span><span class="big">' + k[1] + '</span><span class="small muted">' + k[2] + '</span></div>'; }).join('');
+
+    var low = withHours.filter(function (x) { return x.h > 0; }).sort(function (a, b) { return a.h - b.h || a.s.name.localeCompare(b.s.name); }).slice(0, 3);
+    document.getElementById('low').innerHTML = low.map(function (x) { return '<li><strong>' + x.s.name + '</strong> · ' + x.h + ' h<br><span class="small muted">' + x.s.role + ', ' + x.s.id + '</span></li>'; }).join('');
+
+    document.getElementById('ambs').innerHTML = R.AMBS.map(function (a) {
+      var c = r[i][a], st = R.ambStatus(c), miss = R.missing(c), flag = st === 'Crew incomplete';
+      var chip = st === 'In service' ? '<span class="chip ok">In service</span>' : st === 'Standby' ? '<span class="chip muted">Standby</span>' : '<span class="chip err">Crew incomplete</span>';
+      var crew = R.SEATS.filter(function (s) { return c[s[0]]; }).map(function (s) { return '<li>' + R.staffName(c[s[0]]) + ' <span class="muted">· ' + s[1] + '</span></li>'; }).join('');
+      return '<div class="amb' + (flag ? ' flag' : '') + '"><h3>' + a + chip + '</h3>' + (crew ? '<ul>' + crew + '</ul>' : '<p class="muted" style="margin:6px 0">No crew</p>') +
+        (flag ? '<p class="miss">' + W.ICONS.alert.replace('width="18" height="18"', 'width="13" height="13"') + ' Missing ' + miss.join(', ') + '</p>' : '') +
+        '<span class="small muted">Utilization ' + R.utilization(a, r) + '%</span></div>';
+    }).join('');
+
+    var q = document.getElementById('q').value.trim().toLowerCase(), role = document.getElementById('role').value;
+    var rows = withHours.filter(function (x) { return (!role || x.s.role === role) && (!q || (x.s.name + ' ' + x.s.id).toLowerCase().indexOf(q) >= 0); });
+    rows.sort(document.getElementById('sort').value === 'name' ? function (a, b) { return a.s.name.localeCompare(b.s.name); } : function (a, b) { return b.h - a.h || a.s.name.localeCompare(b.s.name); });
+    var shown = showAll ? rows : rows.slice(0, 15);
+    document.getElementById('hours').innerHTML = shown.map(function (x) {
+      return '<tr><td><strong>' + x.s.name + '</strong><span class="small muted" style="display:block">' + x.s.id + '</span></td><td>' + x.s.role + '</td><td>' + x.s.base + '</td>' +
+        '<td><span class="hbar" aria-hidden="true"><span style="width:' + Math.min(100, x.h / 48 * 100) + '%"></span></span>' + x.h + ' h</td>' +
+        '<td>' + (x.h > 40 ? '<span class="chip solid">' + W.ICONS.alert.replace('width="18" height="18"', 'width="13" height="13"') + ' Over 40 h</span>' : '') + '</td>' +
+        '<td>' + (draft ? '<a class="btn small" href="manager-allocation.html?staff=' + x.s.id + '">Allocate</a>' : '') + '</td></tr>';
+    }).join('') || '<tr><td colspan="6" class="muted">No staff match.</td></tr>';
+    document.getElementById('count').textContent = 'Showing ' + shown.length + ' of ' + rows.length + ' staff';
+    var more = document.getElementById('more'); more.style.display = rows.length > 15 ? '' : 'none';
+    more.textContent = showAll ? 'Show first 15' : 'Show all ' + rows.length;
+  }
+  ['week', 'slot', 'role', 'sort'].forEach(function (id) { document.getElementById(id).addEventListener('change', render); });
+  document.getElementById('q').addEventListener('input', render);
+  document.getElementById('more').addEventListener('click', function () { showAll = !showAll; render(); });
+  render();
+  W.controls([]);
+})();
+</script>
+</body>
+</html>
