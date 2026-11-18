@@ -10,19 +10,22 @@
   @media (max-width: 1000px) { .week-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); } }
   .day { border: 1.5px solid var(--line); border-radius: var(--r); padding: 8px; min-height: 120px; display: flex; flex-direction: column; gap: 8px; background: var(--fill-2); }
   .day h3 { font-size: 14px; margin: 0; }
-  .day.today { border: 2px solid var(--ink); }
-  .shift { text-align: left; width: 100%; border: 2px solid var(--ink); border-radius: var(--r); background: #fff; padding: 8px; font-size: 14px; font: inherit; cursor: pointer; display: flex; flex-direction: column; gap: 4px; min-height: 44px; color: var(--ink); }
+  .day.today { border: 2px solid var(--brand-2); background: var(--brand-tint); }
+  .shift { text-align: left; width: 100%; border: 1px solid var(--line-strong); border-left: 4px solid var(--brand-2); border-radius: var(--r); background: #fff; padding: 8px; font-size: 14px; font: inherit; cursor: pointer; display: flex; flex-direction: column; gap: 4px; min-height: 44px; color: var(--ink); }
   .shift:hover { background: var(--fill); }
   .shift.tentative { border-style: dashed; border-color: var(--muted); color: var(--muted); cursor: default; background: #fff; }
   .shift.done { border-color: var(--line); color: var(--muted); cursor: default; }
   .shift.rejected { border-color: var(--err); }
   .shift strong { font-size: 15px; }
-  .shift .chip { font-size: 12px; padding: 1px 7px; white-space: normal; max-width: 100%; }
+  .shift .chip { font-size: 11.5px; padding: 1px 6px; white-space: normal; max-width: 100%; }
+  .shift span:nth-child(2) { font-size: 12.5px; white-space: nowrap; }
+  .team .state.on { color: var(--ok-ink); }
+  .team .state.leave { color: var(--warn-ink); }
   .off { color: var(--muted); font-size: 14px; }
   .meter { display: flex; flex-direction: column; gap: 8px; }
   .bar-row { display: grid; grid-template-columns: 96px 1fr 44px; gap: 8px; align-items: center; font-size: 14px; }
   .bar { height: 14px; background: var(--fill); border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
-  .bar span { display: block; height: 100%; background: var(--muted); }
+  .bar span { display: block; height: 100%; background: var(--brand-2); }
   .big { font-size: 34px; font-weight: 800; line-height: 1.1; }
   .team td { font-size: 14px; white-space: nowrap; }
   .team .state { display: block; font-weight: 600; }
@@ -174,8 +177,8 @@
     var rows = TEAM.map(function (p) {
       return '<tr><th scope="row">' + p.name + '<span class="small muted" style="display:block;font-weight:400">' + p.role + '</span></th>' +
         p.days.map(function (v) {
-          if (v === 'Day' || v === 'Night') return '<td><span class="state">Active</span><span class="small muted">' + v + '</span></td>';
-          if (v) return '<td><span class="state">' + v + '</span></td>';
+          if (v === 'Day' || v === 'Night') return '<td><span class="state on">Active</span><span class="small muted">' + v + '</span></td>';
+          if (v) return '<td><span class="state' + (v === 'On Leave' ? ' leave' : '') + '">' + v + '</span></td>';
           return '<td class="muted">–</td>';
         }).join('') + '</tr>';
     }).join('');

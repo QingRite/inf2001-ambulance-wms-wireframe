@@ -9,17 +9,17 @@
   .slots { border-collapse: separate; border-spacing: 6px; width: 100%; min-width: 760px; }
   .slots th, .slots td { border: none; padding: 0; background: none; text-align: center; font-size: 13px; }
   .slots th[scope="row"] { text-align: left; width: 90px; }
-  .slotbtn { width: 100%; min-height: 52px; border: 1.5px solid var(--line); border-radius: var(--r); background: #fff; font: inherit; font-size: 13px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--ink); }
-  .slotbtn.short { border: 2px solid var(--err); color: var(--err); font-weight: 600; }
-  .slotbtn[aria-pressed="true"] { outline: 3px solid var(--ink); outline-offset: 1px; }
-  .boards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
-  .board { border: 1.5px solid var(--line); border-radius: var(--r); padding: 10px; }
+  .slotbtn { width: 100%; min-height: 52px; border: 1.5px solid var(--ok-line); color: var(--ok-ink) !important; background: var(--ok-bg) !important; border-radius: var(--r); background: #fff; font: inherit; font-size: 13px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--ink); }
+  .slotbtn.short { border: 2px solid var(--err); color: var(--err) !important; background: var(--err-bg) !important; font-weight: 600; }
+  .slotbtn[aria-pressed="true"] { outline: 3px solid var(--brand-2); outline-offset: 1px; background: var(--brand-tint); }
+  .boards { display: grid; grid-template-columns: repeat(auto-fill, minmax(245px, 1fr)); gap: 10px; }
+  .board { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: #fff; box-shadow: var(--shadow); }
   .board.flag { border: 2px solid var(--err); }
   .board h3 { display: flex; justify-content: space-between; align-items: center; margin: 0 0 8px; font-size: 15px; gap: 6px; }
   .seat { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
-  .seat-btn { flex: 1; text-align: left; min-height: 44px; border: 1.5px solid var(--ink); border-radius: var(--r); background: #fff; font: inherit; font-size: 13px; padding: 6px 8px; cursor: pointer; color: var(--ink); }
-  .seat-btn.empty { border-style: dashed; color: var(--muted); }
-  .seat-btn[aria-pressed="true"] { background: var(--fill); outline: 3px solid var(--ink); }
+  .seat-btn { flex: 1; text-align: left; min-height: 44px; border: 1.5px solid var(--line-strong); border-left: 4px solid var(--brand-2); border-radius: var(--r); background: #fff; font: inherit; font-size: 13px; padding: 6px 8px; cursor: pointer; color: var(--ink); }
+  .seat-btn.empty { border: 1.5px dashed var(--line-strong); color: var(--brand-2); background: var(--fill-2); }
+  .seat-btn[aria-pressed="true"] { background: var(--brand-tint); outline: 3px solid var(--brand-2); }
   .seat-btn .r { display: block; font-size: 12px; color: var(--muted); }
   .rm { min-height: 44px; min-width: 44px; border: 1.5px solid var(--line); border-radius: var(--r); background: #fff; cursor: pointer; font: inherit; font-size: 13px; }
   .pool-row { display: grid; grid-template-columns: 28px 1fr auto; gap: 8px; align-items: start; padding: 10px 0; border-bottom: 1px solid var(--line-2); }

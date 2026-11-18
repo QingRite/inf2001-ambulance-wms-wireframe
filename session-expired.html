@@ -6,17 +6,17 @@
 <title>Session expired – WMS</title>
 <link rel="stylesheet" href="assets/wms.css">
 <style>
-  .wrap { min-height: 80vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
-  .box { max-width: 440px; width: 100%; border: 2px solid var(--ink); border-radius: 8px; padding: 28px; text-align: center; }
-  .box .logo { display: inline-block; margin-bottom: 16px; }
-  .box .ic { display: inline-flex; width: 56px; height: 56px; border: 2px solid var(--ink); border-radius: 50%; align-items: center; justify-content: center; margin-bottom: 12px; }
+  .wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .auth-card { text-align: center; }
+  .auth-brand { justify-content: center; }
+  .ic { display: inline-flex; width: 60px; height: 60px; background: var(--brand-tint); color: var(--brand-2); border-radius: 50%; align-items: center; justify-content: center; margin-bottom: 12px; }
 </style>
 </head>
-<body>
+<body class="auth">
 <main id="main" class="wrap">
   <!-- NFR-11: inactive mobile session ends after 15 minutes -->
-  <div class="box">
-    <span class="logo">WMS</span><br>
+  <div class="auth-card">
+    <div class="auth-brand"><span id="mark"></span><span class="logo-text"><strong>WMS</strong><small>Ambulance Workforce</small></span></div>
     <span class="ic" id="ic"></span>
     <h1>Session expired</h1>
     <p class="sub">You were inactive for 15 minutes, so you have been logged out to protect patient and staff data.</p>
@@ -25,7 +25,8 @@
 </main>
 <script src="assets/wms.js"></script>
 <script>
-  document.getElementById('ic').innerHTML = WMS.ICONS.lock;
+  document.getElementById('ic').innerHTML = WMS.ICONS.lock.replace(/18/g, '26');
+  document.getElementById('mark').innerHTML = WMS.LOGO_MARK;
   WMS.logout();
 </script>
 </body>

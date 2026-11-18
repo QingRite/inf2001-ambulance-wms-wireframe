@@ -6,19 +6,18 @@
 <title>Log in – WMS</title>
 <link rel="stylesheet" href="assets/wms.css">
 <style>
-  .login-wrap { min-height: 80vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
-  .login { width: 100%; max-width: 420px; border: 2px solid var(--ink); border-radius: 8px; padding: 28px; }
-  .login .logo { display: inline-block; margin-bottom: 16px; }
-  .accounts td, .accounts th { padding: 6px 10px; font-size: 13px; }
+  .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .login-foot { text-align: center; color: #c5d5ea; font-size: 13px; margin-top: 18px; }
 </style>
 </head>
-<body>
+<body class="auth">
 <main id="main" class="login-wrap">
   <!-- Fig 5.1.1 Login Page / 5.1.2 Login Failed / 5.1.3 Login Denied (FR-01, FR-43, FR-31) -->
-  <form class="login" id="login-form" novalidate>
-    <span class="logo">WMS</span>
+  <div>
+  <form class="auth-card" id="login-form" novalidate>
+    <div class="auth-brand"><span id="mark"></span><span class="logo-text"><strong>WMS</strong><small>Ambulance Workforce</small></span></div>
     <h1>Log in</h1>
-    <p class="sub">Ambulance workload management system</p>
+    <p class="sub">Sign in with your hospital account.</p>
     <div class="form-summary" id="summary"></div>
     <div class="field">
       <label for="username">Username<span class="req" aria-hidden="true">*</span></label>
@@ -30,6 +29,8 @@
     </div>
     <div class="actions"><button class="btn primary" type="submit" style="width:100%">Log in</button></div>
   </form>
+  <p class="login-foot">Ambulance workload management system</p>
+  </div>
 </main>
 <script src="assets/wms.js"></script>
 <script>
@@ -55,21 +56,7 @@
     location.href = W.HOME[who.group];   // FR-01: each role lands on its own page
   });
 
-  var rows = Object.keys(W.PERSONAS).map(function (k) {
-    var x = W.PERSONAS[k];
-    return '<tr><td><button type="button" class="linklike" data-u="' + k + '">' + k + '</button></td><td>' + x.role + (x.deactivated ? ' (deactivated)' : '') + '</td></tr>';
-  }).join('');
-  W.controls([]);
-  var inner = document.querySelector('.proto-inner');
-  inner.insertAdjacentHTML('beforeend',
-    '<p class="small muted" style="margin:12px 0 6px">Demo accounts – password for all: <strong>' + W.PASSWORD + '</strong>. Click a username to fill the form.</p>' +
-    '<table class="accounts"><thead><tr><th>Username</th><th>Role</th></tr></thead><tbody>' + rows + '</tbody></table>' +
-    '<p class="small muted" style="margin:8px 0 0">Any other password shows the login-failed state. </p>');
-  inner.querySelectorAll('[data-u]').forEach(function (b) {
-    b.addEventListener('click', function () { u.value = b.getAttribute('data-u'); p.value = W.PASSWORD; u.focus(); });
-  });
-  // the shared controls include an idle button that makes no sense before login
-  inner.querySelectorAll('.btns .btn').forEach(function (b) { if (/idle/.test(b.textContent)) b.remove(); });
+  document.getElementById('mark').innerHTML = W.LOGO_MARK;
 })();
 </script>
 </body>

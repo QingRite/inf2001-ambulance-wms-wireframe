@@ -23,15 +23,19 @@
 
   <section>
     <h2>1. Shell (built automatically)</h2>
-    <p>Set two attributes on <code>&lt;body&gt;</code> and include <code>assets/wms.js</code>. The script adds the WMS logo, the role's nav (current tab bold), the user's name and role, the bell with the inbox panel, and Log out. The bar at the top of this page is the staff version.</p>
+    <p>Set two attributes on <code>&lt;body&gt;</code> and include <code>assets/wms.js</code>. The script adds the navy top bar (WMS logo, the user's name and role, the bell with the inbox panel, Log out) and the folder-style tabs for that role. The active tab joins the white content panel below it. The tabs at the top of this page are the staff version.</p>
     <div class="code">&lt;body data-group="manager" data-active="manager-allocation"&gt;
   &lt;main id="main"&gt; ...your page... &lt;/main&gt;
   &lt;script src="assets/wms.js"&gt;&lt;/script&gt;
 &lt;/body&gt;</div>
     <p class="muted small">data-group: staff | manager | admin. data-active: the nav key from NAV in assets/wms.js. Manager and IT Admin versions:</p>
-    <div class="demo">
-      <header class="shell static-shell"><span class="logo">WMS</span><nav aria-label="Manager nav example"><a aria-current="page">Overview</a><a>Allocation</a><a>Coverage</a><a>Timetable</a><a>Requests</a><a>Swaps &amp; Stand-ins</a><a>Leave Records</a></nav><div class="shell-right"><div class="who"><span class="who-name">Rachel Lim</span><span class="who-role">Manager</span></div><span class="icon-btn" aria-hidden="true" id="b1"></span><span class="logout">Log out</span></div></header>
-      <header class="shell static-shell"><span class="logo">WMS</span><nav aria-label="IT Admin nav example"><a aria-current="page">Accounts</a><a>Roles &amp; Permissions</a><a>Audit Log</a></nav><div class="shell-right"><div class="who"><span class="who-name">Jason Ong</span><span class="who-role">IT Administrator</span></div><span class="icon-btn" aria-hidden="true" id="b2"></span><span class="logout">Log out</span></div></header>
+    <div class="demo" style="background:var(--page)">
+      <p class="small muted" style="margin:0 0 6px">Manager tabs</p>
+      <nav class="folder-tabs" style="margin:0 0 -1.5px;padding:0" aria-label="Manager nav example"><a aria-current="page">Overview</a><a>Allocation</a><a>Coverage</a><a>Timetable</a><a>Requests</a><a>Swaps &amp; Stand-ins</a><a>Leave Records</a></nav>
+      <div style="background:#fff;border:1.5px solid var(--line);border-radius:0 12px 12px 12px;height:48px;margin-bottom:16px"></div>
+      <p class="small muted" style="margin:0 0 6px">IT Administrator tabs</p>
+      <nav class="folder-tabs" style="margin:0 0 -1.5px;padding:0" aria-label="IT Admin nav example"><a aria-current="page">Accounts</a><a>Roles &amp; Permissions</a><a>Audit Log</a></nav>
+      <div style="background:#fff;border:1.5px solid var(--line);border-radius:0 12px 12px 12px;height:48px"></div>
     </div>
   </section>
 
@@ -44,9 +48,9 @@
 
   <section>
     <h2>3. Status labels (NFR-07: colour always with text)</h2>
-    <div class="demo chips"><span class="chip">Published</span><span class="chip tentative">Tentative</span><span class="chip muted">Completed</span><span class="chip solid">On duty now</span><span class="chip ok" id="c-ok">Approved</span><span class="chip err">Rejected</span><span class="chip" id="c-p">Pending Manager approval</span></div>
+    <div class="demo chips"><span class="chip">Published</span><span class="chip tentative">Tentative</span><span class="chip muted">Completed</span><span class="chip solid">On duty now</span><span class="chip warn">Over 40 h</span><span class="chip ok" id="c-ok">Approved</span><span class="chip err">Rejected</span><span class="chip" id="c-p">Pending Manager approval</span></div>
     <div class="code">&lt;span class="chip ok"&gt;Approved&lt;/span&gt;  &lt;span class="chip err"&gt;Rejected&lt;/span&gt;  &lt;span class="chip tentative"&gt;Tentative&lt;/span&gt;</div>
-    <p class="muted small">Colour use: greyscale everywhere, green only for selected availability and approved states, red only for errors, rejections and destructive actions.</p>
+    <p class="muted small">Colour use: navy and blue for structure and main actions, green for available and approved, amber for tentative and warnings, red for errors, rejections and destructive actions, coral only for the logo and notification badge.</p>
   </section>
 
   <section>
@@ -113,7 +117,6 @@ WMS.ICONS.alert / check / clock / lock / info / bell</div>
 <script>
 (function () {
   var W = WMS;
-  ['b1', 'b2'].forEach(function (id) { document.getElementById(id).innerHTML = W.ICONS.bell; });
   document.getElementById('bn1').insertAdjacentHTML('afterbegin', W.ICONS.clock);
   document.getElementById('bn2').insertAdjacentHTML('afterbegin', W.ICONS.check);
   document.getElementById('bn3').insertAdjacentHTML('afterbegin', W.ICONS.alert);

@@ -1,6 +1,6 @@
 # WMS interactive wireframe prototype (INF2001 P12 Team 2, M2)
 
-Clickable low-fidelity prototype of the ambulance workload management system (WMS).
+Clickable prototype of the ambulance workload management system (WMS).
 Plain HTML, CSS and JavaScript.
 
 
@@ -18,7 +18,7 @@ Password for all: `demo1234`. Any other password shows the login-failed state.
 **Prototype date:** every page treats today as **Fri 27 Nov 2026**, so screenshots always show the same dates.
 The week of 07–13 Dec 2026 is the draft roster (same week as the white-box tests in 4.2.5).
 
-**Prototype controls:** the dashed box at the bottom of each page switches into states that depend on time or on
+**Prototype controls:** the dashed box at the bottom of each logged-in page switches into states that depend on time or on
 other people (cutoff passed, roster published, 24 hours later). It is not part of the design. Crop it out of screenshots.
 "Reset prototype data" puts everything back to the starting state. Data is saved in your own browser only.
 
@@ -77,10 +77,10 @@ Manager pages; Manager approvals, stand-ins and roster publication show up in st
 
 ## Conventions (from the Wireframes section of the report)
 
-- Low-fidelity greyscale. Green only for selected availability and approved states; red only for errors and destructive actions.
+- Colours: navy and blue for structure and main actions, green for available and approved, amber for tentative and warnings, red for errors and destructive actions, coral only for the logo and notification badge.
 - Every status is a colour plus a text label (NFR-07). Same label for the same action on every page, Cancel on the left, main action on the right (NFR-18).
-- Every logged-in page: WMS logo, role nav with the current tab in bold, name and role, bell with inbox panel.
-- Pop-ups are a grey box over the dimmed page. Errors show a (!) message next to each invalid field plus a summary near the main button (FR-31).
+- Every logged-in page: navy top bar (WMS logo, name and role, bell with inbox panel, Log out) and folder-style tabs; the active tab joins the white content panel below it.
+- Pop-ups are a white box over the dimmed page. Errors show a (!) message next to each invalid field plus a summary near the main button (FR-31).
 - Works from 360 px phone width to desktop (NFR-05); buttons are at least 44 px tall.
 - Personas: Nur Aisyah (Paramedic), Ravi Kumar (Care Assistant), Marcus Tan (Driver), Rachel Lim (Manager), Jason Ong (IT Administrator).
 

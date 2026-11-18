@@ -116,6 +116,7 @@
     var dd = Math.round(h / 24); return dd + (dd === 1 ? ' day ago' : ' days ago');
   }
 
+  var LOGO_MARK = '<span class="logo-mark" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M9 2h6v7h7v6h-7v7H9v-7H2V9h7z"/></svg></span>';
   var ICONS = {
     bell: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>',
     alert: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="7" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
@@ -184,16 +185,17 @@
       return '<a href="' + n[2] + '"' + (n[0] === active ? ' aria-current="page"' : '') + '>' + esc(n[1]) + '</a>';
     }).join('');
     var html = skip +
-      '<header class="shell">' +
-      '<a class="logo" href="' + HOME[group] + '" aria-label="WMS home">WMS</a>' +
-      '<nav aria-label="Main">' + nav + '</nav>' +
+      '<header class="shell"><div class="shell-bar">' +
+      '<a class="logo" href="' + HOME[group] + '" aria-label="WMS home">' + LOGO_MARK + '<span class="logo-text"><strong>WMS</strong><small>Ambulance Workforce</small></span></a>' +
       '<div class="shell-right">' +
       '<div class="who"><span class="who-name">' + esc(u.name) + '</span><span class="who-role">' + esc(u.role) + '</span></div>' +
       '<button class="icon-btn" id="bell" aria-haspopup="true" aria-expanded="false" aria-controls="inbox">' + ICONS.bell + '<span class="badge" id="bell-badge"></span></button>' +
       '<a class="logout" href="index.html" id="logout">Log out</a>' +
       '</div>' +
       '<div class="inbox" id="inbox" hidden role="region" aria-label="Notifications"></div>' +
-      '</header>';
+      '</div></header>' +
+      '<nav class="folder-tabs" aria-label="Main">' + nav + '</nav>';
+    document.body.classList.add('has-shell');
     document.body.insertAdjacentHTML('afterbegin', html);
     document.getElementById('logout').addEventListener('click', function () { logout(); });
     var bell = document.getElementById('bell'), box = document.getElementById('inbox');
@@ -361,7 +363,7 @@
   }
 
   window.WMS = {
-    TODAY: TODAY, PERSONAS: PERSONAS, PASSWORD: PASSWORD, HOME: HOME, NAV: NAV,
+    LOGO_MARK: LOGO_MARK, TODAY: TODAY, PERSONAS: PERSONAS, PASSWORD: PASSWORD, HOME: HOME, NAV: NAV,
     WEEKS: WEEKS, MY_SHIFTS: MY_SHIFTS, COLLEAGUES: COLLEAGUES, SLOT_TIME: SLOT_TIME, ICONS: ICONS,
     store: store, esc: esc, nonWs: nonWs, parse: parse, addDays: addDays, fmtDate: fmtDate, shiftLabel: shiftLabel, ago: ago,
     currentUser: currentUser, ensureUser: ensureUser, login: login, logout: logout,

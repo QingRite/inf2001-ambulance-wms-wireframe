@@ -9,13 +9,13 @@
   .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
   .kpi .big { font-size: 32px; font-weight: 800; line-height: 1.1; display: block; }
   .ambs { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
-  .amb { border: 1.5px solid var(--line); border-radius: var(--r); padding: 10px 12px; font-size: 14px; }
+  .amb { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 14px; background: #fff; }
   .amb.flag { border: 2px solid var(--err); }
   .amb h3 { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin: 0 0 6px; font-size: 15px; }
   .amb ul { list-style: none; margin: 6px 0; padding: 0; }
   .amb .miss { color: var(--err); font-weight: 600; font-size: 13px; }
   .hbar { display: inline-block; width: 120px; height: 10px; background: var(--fill); border: 1px solid var(--line); border-radius: 3px; vertical-align: middle; margin-right: 8px; overflow: hidden; }
-  .hbar span { display: block; height: 100%; background: var(--muted); }
+  .hbar span { display: block; height: 100%; background: var(--brand-2); }
   .filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 12px; }
   .filters .field { margin: 0; min-width: 200px; }
   ol.low { margin: 0; padding-left: 22px; }
@@ -106,7 +106,7 @@
     document.getElementById('hours').innerHTML = shown.map(function (x) {
       return '<tr><td><strong>' + x.s.name + '</strong><span class="small muted" style="display:block">' + x.s.id + '</span></td><td>' + x.s.role + '</td><td>' + x.s.base + '</td>' +
         '<td><span class="hbar" aria-hidden="true"><span style="width:' + Math.min(100, x.h / 48 * 100) + '%"></span></span>' + x.h + ' h</td>' +
-        '<td>' + (x.h > 40 ? '<span class="chip solid">' + W.ICONS.alert.replace('width="18" height="18"', 'width="13" height="13"') + ' Over 40 h</span>' : '') + '</td>' +
+        '<td>' + (x.h > 40 ? '<span class="chip warn">' + W.ICONS.alert.replace('width="18" height="18"', 'width="13" height="13"') + ' Over 40 h</span>' : '') + '</td>' +
         '<td>' + (draft ? '<a class="btn small" href="manager-allocation.html?staff=' + x.s.id + '">Allocate</a>' : '') + '</td></tr>';
     }).join('') || '<tr><td colspan="6" class="muted">No staff match.</td></tr>';
     document.getElementById('count').textContent = 'Showing ' + shown.length + ' of ' + rows.length + ' staff';
