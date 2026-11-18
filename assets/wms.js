@@ -131,10 +131,24 @@
     var key = store.get('user', null);
     return key && PERSONAS[key] ? Object.assign({ key: key }, PERSONAS[key]) : null;
   }
+  /* NFR-08: a signed-in user only opens pages for their own group. With nobody signed in (a direct link
+     to a page), the prototype signs in that page's demo persona so every screen can still be viewed. */
   function ensureUser(group) {
     var u = currentUser();
-    if (!u || u.group !== group) { store.set('user', DEFAULT_USER[group]); u = currentUser(); }
-    return u;
+    if (!u) { store.set('user', DEFAULT_USER[group]); u = currentUser(); }
+    return u.group === group ? u : null;
+  }
+  var GROUP_NAME = { staff: 'staff', manager: 'Manager', admin: 'IT Administrator' };
+  function denyAccess(u, group) {
+    if (FRAMED) postParent({ type: 'wms-controls', path: pageFile(), title: 'No access', items: [] });
+    window.addEventListener('error', function (e) { e.preventDefault(); }, true);   // the page's own script stops here
+    document.title = 'No access – WMS';
+    document.body.className = 'denied';
+    document.body.innerHTML = '<main id="main" class="denied-box"><div class="card"><h1>You don\'t have access to this page</h1>' +
+      '<p>You are signed in as <strong>' + esc(u.name) + '</strong> (' + esc(u.role) + '). This page is for ' + GROUP_NAME[group] + ' accounts only, so nothing on it has been loaded.</p>' +
+      '<div class="actions left"><a class="btn primary" href="' + HOME[u.group] + '">Go to my home page</a><a class="btn" href="login.html" id="switch">Log in as someone else</a></div></div></main>';
+    document.getElementById('switch').addEventListener('click', function () { logout(); });
+    window.WMS = undefined;
   }
   function login(key) { store.set('user', key); }
   function logout() { store.set('user', null); }
@@ -173,7 +187,7 @@
     renderInbox();
   }
 
-  /* ---------- Phone frame for the staff app (staff-app.html shows staff pages inside a phone) ---------- */
+  /* ---------- Device preview: index.html shows every page inside a phone or laptop frame ---------- */
   var FRAMED = (function () { try { return window.self !== window.top; } catch (e) { return true; } })();
   function postParent(msg) { if (FRAMED) { try { window.parent.postMessage(msg, '*'); } catch (e) { /* ignore */ } } }
   function pageFile() { return location.pathname.split('/').pop() + location.search; }
@@ -182,11 +196,16 @@
   var inboxTab = 'inbox';
   function buildShell() {
     var group = document.body.getAttribute('data-group');
-    if (FRAMED) postParent({ type: 'wms-page', path: pageFile(), title: document.title.replace(/ – WMS$/, '') });
+    if (FRAMED) postParent({ type: 'wms-page', path: pageFile(), title: document.title.replace(/ – WMS$/, ''), group: group || '' });
+    /* every page opens inside the device preview (index.html): phone by default, laptop on toggle */
+    if (!FRAMED && !document.body.hasAttribute('data-preview') && !store.get('noframe', false)) {
+      if (group && !currentUser()) ensureUser(group);
+      location.replace('index.html?p=' + encodeURIComponent(pageFile()));
+      return;
+    }
     if (!group) return;
-    /* staff pages always open inside the phone frame */
     var u = ensureUser(group);
-    if (group === 'staff' && !FRAMED && !store.get('noframe', false)) { location.replace('staff-app.html?p=' + encodeURIComponent(pageFile())); return; }
+    if (!u) { denyAccess(currentUser(), group); return; }
     var active = document.body.getAttribute('data-active');
     var skip = '<a class="skip" href="#main">Skip to content</a>';
     var nav = NAV[group].map(function (n) {
@@ -194,11 +213,11 @@
     }).join('');
     var html = skip +
       '<header class="shell"><div class="shell-bar">' +
-      '<a class="logo" href="' + HOME[group] + '" aria-label="WMS home">' + LOGO_MARK + '<span class="logo-text"><strong>WMS</strong><small>Ambulance Workforce</small></span></a>' +
+      '<a class="logo" href="' + HOME[group] + '">' + LOGO_MARK + '<span class="logo-text"><strong>WMS</strong><small>Ambulance Workforce</small></span></a>' +
       '<div class="shell-right">' +
       '<div class="who"><span class="who-name">' + esc(u.name) + '</span><span class="who-role">' + esc(u.role) + '</span></div>' +
       '<button class="icon-btn" id="bell" aria-haspopup="true" aria-expanded="false" aria-controls="inbox">' + ICONS.bell + '<span class="badge" id="bell-badge"></span></button>' +
-      '<a class="logout" href="index.html" id="logout"' + (FRAMED ? ' target="_top"' : '') + '>Log out</a>' +
+      '<a class="logout" href="login.html" id="logout">Log out</a>' +
       '</div>' +
       '<div class="inbox" id="inbox" hidden role="region" aria-label="Notifications"></div>' +
       '</div></header>' +

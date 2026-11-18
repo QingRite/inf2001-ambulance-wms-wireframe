@@ -38,6 +38,10 @@
     n++;
     var s = { id: id, name: name, role: role, team: team, amb: amb, base: BASES[amb] || 'Jurong',
       pref: PREFS[(num(id) * 5 + role.length) % 3], duty: DUTIES[(num(id) + role.length) % 3], username: USERNAME[id] || null };
+    var k = num(id);
+    s.certs = role === 'Driver' ? (k % 2 ? ['Class 3 licence'] : ['Class 3 licence', 'Class 4 licence'])
+      : role === 'Paramedic' ? (k % 3 ? ['Paramedic registration', 'Advanced Life Support'] : ['Paramedic registration'])
+      : (k % 2 ? ['Basic Life Support', 'Patient handling'] : ['Basic Life Support']);
     STAFF.push(s); BY_ID[id] = s;
   }
   for (var t = 0; t < 5; t++) {
@@ -54,18 +58,30 @@
 
   /* Leave in the target week (FR-33, FR-36). Chosen on days the person is not rostered. */
   var LEAVE = [
-    { id: 'L-301', staff: 'DRV-20', cat: 'Emergency Leave', start: '2026-12-07', end: '2026-12-07', reason: 'Family member admitted to hospital.', mc: false, by: 'Rachel Lim', recorded: '2026-11-26' },
-    { id: 'L-302', staff: 'PM-30', cat: 'Medical Leave', start: '2026-12-09', end: '2026-12-09', reason: 'Minor surgery, 1 day MC.', mc: true, by: 'PM-30 (self)', recorded: '2026-11-24' },
-    { id: 'L-303', staff: 'CA-14', cat: 'Annual Leave', start: '2026-12-11', end: '2026-12-11', reason: 'Wedding anniversary.', mc: false, by: 'CA-14 (self)', recorded: '2026-11-10' },
-    { id: 'L-298', staff: 'PM-06', cat: 'Annual Leave', start: '2026-12-03', end: '2026-12-04', reason: 'Family trip.', mc: false, by: 'Rachel Lim', recorded: '2026-11-25' },
-    { id: 'L-297', staff: 'PM-05', cat: 'Annual Leave', start: '2026-12-21', end: '2026-12-22', reason: 'Family trip.', mc: false, by: 'PM-05 (self)', recorded: '2026-11-02' }
+    { id: 'L-301', staff: 'DRV-20', cat: 'Urgent Leave', shift: 'Both shifts', start: '2026-12-07', end: '2026-12-07', reason: 'Family member admitted to hospital.', mc: false, by: 'Rachel Lim', recorded: '2026-11-26' },
+    { id: 'L-302', staff: 'PM-30', cat: 'Medical (MC)', shift: 'Both shifts', start: '2026-12-09', end: '2026-12-09', reason: 'Minor surgery, 1 day MC.', mc: true, by: 'PM-30 (self)', recorded: '2026-11-24' },
+    { id: 'L-303', staff: 'CA-14', cat: 'Annual Leave', shift: 'Both shifts', start: '2026-12-11', end: '2026-12-11', reason: 'Wedding anniversary.', mc: false, by: 'CA-14 (self)', recorded: '2026-11-10' },
+    { id: 'L-298', staff: 'PM-06', cat: 'Annual Leave', shift: 'Both shifts', start: '2026-12-03', end: '2026-12-04', reason: 'Family trip.', mc: false, by: 'Rachel Lim', recorded: '2026-11-25' },
+    { id: 'L-297', staff: 'PM-05', cat: 'Annual Leave', shift: 'Both shifts', start: '2026-12-21', end: '2026-12-22', reason: 'Family trip.', mc: false, by: 'PM-05 (self)', recorded: '2026-11-02' }
   ];
   function leaves() {
     var extra = W.store.get('mgr.leave', []);
     var staffSide = W.store.get('absences', []).map(function (a, k) {
-      return { id: 'L-S' + k, staff: 'PM-05', cat: a.cat, start: a.start, end: a.end, reason: a.desc || '–', mc: !!a.file, by: 'PM-05 (self)', recorded: a.sent };
+      return { id: 'L-S' + k, staff: 'PM-05', cat: a.cat, shift: a.shift || 'Both shifts', start: a.start, end: a.end, reason: a.desc || '–', mc: !!a.file, by: 'PM-05 (self)', recorded: a.sent };
     });
     return extra.concat(staffSide).concat(LEAVE);
+  }
+  /* FR-36: preferred off-days submitted with availability (FR-12). A preference, so they never block allocation. */
+  var PREF_OFF = [['DRV-03', '2026-12-12'], ['DRV-03', '2026-12-13'], ['CA-03', '2026-12-09'], ['PM-12', '2026-12-13'], ['CA-20', '2026-12-08']];
+  function prefOffDays() {
+    var out = PREF_OFF.map(function (p, k) { return { id: 'P-' + k, staff: p[0], cat: 'Preferred off-day', shift: 'Both shifts', start: p[1], end: p[1], reason: 'Submitted with weekly availability.', mc: false, by: p[0] + ' (self)', recorded: '2026-11-20', pref: true }; });
+    var av = W.store.get('avail', null) || {};
+    Object.keys(av).forEach(function (wk) {
+      if (!av[wk].submitted) return;
+      Object.keys(av[wk].slots).forEach(function (d) { var v = av[wk].slots[d];
+        if (v.off && !v.Day && !v.Night) out.push({ id: 'P-S' + d, staff: 'PM-05', cat: 'Preferred off-day', shift: 'Both shifts', start: d, end: d, reason: 'Submitted with weekly availability.', mc: false, by: 'PM-05 (self)', recorded: av[wk].submitted, pref: true }); });
+    });
+    return out;
   }
   function onLeave(id, date) { return leaves().filter(function (l) { return l.staff === id && date >= l.start && date <= l.end; })[0] || null; }
 
@@ -155,13 +171,14 @@
 
   /* ---------- User accounts (IT Administrator pages) ---------- */
   function slug(name) { return name.toLowerCase().replace(/[^a-z ]/g, '').trim().replace(/\s+/g, '.'); }
+  var ROLE_CERTS = { 'Driver': ['Class 3 licence', 'Class 4 licence'], 'Paramedic': ['Advanced Life Support', 'Paramedic registration'], 'Care Assistant': ['Basic Life Support', 'Patient handling'] };
   function accounts() {
     var a = W.store.get('accounts', null);
     if (a) return a;
     var seen = {};
     a = STAFF.map(function (s) {
       var u = s.username || slug(s.name); if (seen[u]) u = u + '.' + num(s.id); seen[u] = 1;
-      return { username: u, name: s.name, role: s.role, staffId: s.id, status: 'Active', email: u + '@hospital.example', created: '2025-0' + (1 + num(s.id) % 9) + '-15' };
+      return { username: u, name: s.name, role: s.role, staffId: s.id, certs: s.certs || ROLE_CERTS[s.role] || [], status: 'Active', email: u + '@hospital.example', created: '2025-0' + (1 + num(s.id) % 9) + '-15' };
     });
     a.push({ username: 'rachel.lim', name: 'Rachel Lim', role: 'Manager', staffId: 'MGR-02', status: 'Active', email: 'rachel.lim@hospital.example', created: '2024-03-01' });
     a.push({ username: 'jason.ong', name: 'Jason Ong', role: 'IT Administrator', staffId: 'IT-01', status: 'Active', email: 'jason.ong@hospital.example', created: '2024-01-08' });
@@ -198,7 +215,7 @@
     accounts: accounts, saveAccounts: saveAccounts, PERMS: PERMS, ROLES: ROLES, rolePerms: rolePerms, activeDuty: activeDuty,
     WEEK: WEEK, AMBS: AMBS, BASES: BASES, SEATS: SEATS, ROLE_OF_SEAT: ROLE_OF_SEAT, MIN_FULL: MIN_FULL, PUBLISH_BY: PUBLISH_BY,
     SLOTS: SLOTS, TEAMS: TEAMS, STAFF: STAFF, BY_ID: BY_ID, slotLabel: slotLabel,
-    leaves: leaves, onLeave: onLeave, roster: roster, saveRoster: saveRoster, generate: generate, published: published, rejections: rejections,
+    leaves: leaves, prefOffDays: prefOffDays, onLeave: onLeave, roster: roster, saveRoster: saveRoster, generate: generate, published: published, rejections: rejections,
     seatsOf: seatsOf, hours: hours, isFull: isFull, fullCount: fullCount, crewCount: crewCount, missing: missing, ambStatus: ambStatus,
     utilization: utilization, shortSlots: shortSlots, restCheck: restCheck, available: available, jobs: jobs,
     checkStaffingRequirements: checkStaffingRequirements, loadTestCase: loadTestCase, staffName: staffName, staffLabel: staffLabel

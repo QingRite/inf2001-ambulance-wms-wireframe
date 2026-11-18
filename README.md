@@ -18,11 +18,16 @@ Password for all: `demo1234`. Any other password shows the login-failed state.
 **Prototype date:** every page treats today as **Fri 27 Nov 2026**, so screenshots always show the same dates.
 The week of 07–13 Dec 2026 is the draft roster (same week as the white-box tests in 4.2.5).
 
-**Staff app in a phone:** staff pages always open inside a phone frame (`staff-app.html`), with the prototype controls in a panel beside the phone: switch between Nur Aisyah, Ravi Kumar and Marcus Tan, trigger this screen's states, simulate idle, reset data or log out. Nothing inside the phone is a prototype control.
+**How to open:** double-click `index.html`. Every page opens inside a device preview: the app runs in a phone on the
+left, and the prototype controls sit in a panel on the right. The label above the device says which view you are in.
 
-**Prototype controls:** on Manager and IT Admin pages, the dashed box at the bottom of each page switches into states that depend on time or on
-other people (cutoff passed, roster published, 24 hours later). It is not part of the design. Crop it out of screenshots.
-"Reset prototype data" puts everything back to the starting state. Data is saved in your own browser only.
+**Prototype controls panel** (not part of the design; everything inside the device is the real app):
+- **Toggle view:** switch between Phone (390 × 760) and Laptop (1280 × 800, scaled to fit). Your choice is remembered.
+- **View as:** jump straight to Nur Aisyah, Ravi Kumar, Marcus Tan, Rachel Lim or Jason Ong without logging in.
+- **This screen:** states for whichever screen is open (cutoff passed, roster published, 24 hours later, white-box tests #1–#6...).
+- **Any screen:** simulate 15 minutes idle, reset prototype data, log out.
+
+Data is saved in your own browser only. "Reset prototype data" puts everything back to the starting state.
 
 ## What is built 
 
@@ -30,9 +35,9 @@ other people (cutoff passed, roster published, 24 hours later). It is not part o
 
 | File | Page | Requirements | Use cases |
 | --- | --- | --- | --- |
-| `index.html` | Login | FR-01, FR-31, FR-43 | – |
+| `index.html` | Device preview: phone or laptop frame with the prototype controls panel | NFR-05, NFR-11 | – |
+| `login.html` | Login | FR-01, FR-31, FR-43 | – |
 | `session-expired.html` | Session expired | NFR-11 | – |
-| `staff-app.html` | Phone frame for the staff pages, with the prototype controls panel | NFR-05, NFR-11 | – |
 | `components.html` | Shared components reference | NFR-07, NFR-18 | – |
 
 **Operational staff** (log in as `nur.aisyah`, `ravi.kumar` or `marcus.tan`)
@@ -66,7 +71,7 @@ other people (cutoff passed, roster published, 24 hours later). It is not part o
 | `admin-audit.html` | Audit log (read-only) | FR-32, NFR-16 | – |
 
 Shared data: `assets/wms-roster.js` holds the 123 staff, 10 ambulances and the 14 twelve-hour slots of the draft roster
-for 07–13 Dec 2026. `_template.html` is the starting file for a new page. `todo.html` is no longer linked from anywhere and can be deleted.
+for 07–13 Dec 2026. `_template.html` is the starting file for a new page. `todo.html` and `staff-app.html` are no longer used (`staff-app.html` only forwards old links to `index.html`) and can be deleted.
 
 **How the two sides connect** (same browser): a staff late request, shift rejection, accepted swap or absence appears on the
 Manager pages; Manager approvals, stand-ins and roster publication show up in staff notifications and on My Schedule and Requests.

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Log in – WMS</title>
+<link rel="stylesheet" href="assets/wms.css">
+<style>
+  .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .login-foot { text-align: center; color: #c5d5ea; font-size: 13px; margin-top: 18px; }
+</style>
+</head>
+<body class="auth">
+<main id="main" class="login-wrap">
+  <!-- Fig 5.1.1 Login Page / 5.1.2 Login Failed / 5.1.3 Login Denied (FR-01, FR-43, FR-31) -->
+  <div>
+  <form class="auth-card" id="login-form" novalidate>
+    <div class="auth-brand"><span id="mark"></span><span class="logo-text"><strong>WMS</strong><small>Ambulance Workforce</small></span></div>
+    <h1>Log in</h1>
+    <p class="sub">Sign in with your hospital account.</p>
+    <div class="form-summary" id="summary"></div>
+    <div class="field">
+      <label for="username">Username<span class="req" aria-hidden="true">*</span></label>
+      <input type="text" id="username" autocomplete="username" required>
+    </div>
+    <div class="field">
+      <label for="password">Password<span class="req" aria-hidden="true">*</span></label>
+      <input type="password" id="password" autocomplete="current-password" required>
+    </div>
+    <div class="actions"><button class="btn primary" type="submit" style="width:100%">Log in</button></div>
+  </form>
+  <p class="login-foot">Ambulance workload management system</p>
+  </div>
+</main>
+<script src="assets/wms.js"></script>
+<script>
+(function () {
+  var W = WMS, form = document.getElementById('login-form');
+  var u = document.getElementById('username'), p = document.getElementById('password');
+  form.addEventListener('submit', function (e) {
+    e.preventDefault(); W.clearErrors(form);
+    var bad = false;
+    if (!u.value.trim()) { W.setError(u, 'Enter your username.'); bad = true; }
+    if (!p.value) { W.setError(p, 'Enter your password.'); bad = true; }
+    if (bad) { (form.querySelector('[aria-invalid]') || u).focus(); return; }
+    var key = u.value.trim().toLowerCase(), who = W.PERSONAS[key];
+    if (who && W.isDeactivated(key)) {
+      W.summary(form, 'This account has been deactivated. Contact your IT Administrator.');
+      p.value = ''; return;
+    }
+    if (!who || p.value !== W.PASSWORD) {
+      W.summary(form, 'Incorrect username or password. Check both and try again.');
+      p.value = ''; p.focus(); return;
+    }
+    W.login(key);
+    location.href = W.HOME[who.group];   // FR-01: each role lands on its own page
+  });
+
+  document.getElementById('mark').innerHTML = W.LOGO_MARK;
+})();
+</script>
+</body>
+</html>

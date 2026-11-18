@@ -153,9 +153,11 @@
   /* ---- Record an absence (FR-23) ---- */
   function absencePanel() {
     return '<form class="card" id="abs-form" novalidate><h2>Record an absence</h2><p class="hint" style="margin:-6px 0 14px">Fields marked * are required.</p><div class="form-summary"></div>' +
-      '<div class="field"><label for="cat">Absence category<span class="req" aria-hidden="true">*</span></label><select id="cat"><option value="">Select a category</option><option>Medical Leave</option><option>Emergency Leave</option><option>Annual Leave</option><option>Other</option></select></div>' +
+      '<div class="field"><span class="label">Staff ID</span><p style="margin:0"><strong>' + W.esc(me.id) + '</strong> <span class="muted">' + W.esc(me.name) + '</span></p></div>' +
+      '<div class="field"><label for="cat">Absence category<span class="req" aria-hidden="true">*</span></label><select id="cat"><option value="">Select a category</option><option>Medical (MC)</option><option>Annual Leave</option><option>Urgent Leave</option><option>Compassionate Leave</option></select></div>' +
       '<div class="grid-2"><div class="field"><label for="start">Start date<span class="req" aria-hidden="true">*</span></label><input type="date" id="start" min="' + W.TODAY + '"></div>' +
       '<div class="field"><label for="end">End date<span class="req" aria-hidden="true">*</span></label><input type="date" id="end" min="' + W.TODAY + '"></div></div>' +
+      '<div class="field"><label for="shift">Shift affected<span class="req" aria-hidden="true">*</span></label><select id="shift"><option value="">Select a shift</option><option>Both shifts</option><option>Day 08:00–20:00</option><option>Night 20:00–08:00</option></select></div>' +
       '<div class="field"><label for="desc">Description</label><textarea id="desc" placeholder="Optional. Only your Manager can see this."></textarea></div>' +
       '<div class="field"><label for="mc">Medical certificate</label><input type="file" id="mc" accept=".pdf,.jpg,.png"><p class="hint">PDF, JPG or PNG. Only your Manager can see it.</p></div>' +
       '<div class="actions"><a class="btn" href="staff-schedule.html">Cancel</a><button class="btn primary" type="submit">Submit absence</button></div></form>';
@@ -164,19 +166,20 @@
     var f = document.getElementById('abs-form'); if (!f) return;
     f.addEventListener('submit', function (e) {
       e.preventDefault(); W.clearErrors(f);
-      var cat = f.querySelector('#cat'), st = f.querySelector('#start'), en = f.querySelector('#end');
+      var cat = f.querySelector('#cat'), st = f.querySelector('#start'), en = f.querySelector('#end'), sh = f.querySelector('#shift');
       var missing = [];
       if (!cat.value) W.setError(cat, 'Select an absence category.');
       if (!st.value) { W.setError(st, 'Enter a start date.'); missing.push('start date'); }
       if (!en.value) { W.setError(en, 'Enter an end date.'); missing.push('end date'); }
       if (st.value && en.value && en.value < st.value) W.setError(en, 'End date must be on or after the start date.');
+      if (!sh.value) W.setError(sh, 'Select which shift you will miss, or Both shifts.');
       if (f.querySelector('[aria-invalid]')) {
         W.summary(f, missing.length ? 'Submission denied – missing ' + missing.join(' and ') + '. Fix the fields marked below.' : 'Submission denied. Fix the fields marked below.');
         f.querySelector('[aria-invalid]').focus(); return;
       }
-      var hit = W.MY_SHIFTS.filter(function (s) { return s.date >= st.value && s.date <= en.value; });
+      var hit = W.MY_SHIFTS.filter(function (s) { return s.date >= st.value && s.date <= en.value && (sh.value === 'Both shifts' || sh.value.indexOf(s.slot) === 0); });
       var list = W.store.get('absences', []);
-      list.unshift({ cat: cat.value, start: st.value, end: en.value, desc: f.querySelector('#desc').value.trim(), sent: W.TODAY, status: 'Recorded', file: f.querySelector('#mc').files.length > 0 });
+      list.unshift({ cat: cat.value, shift: sh.value, start: st.value, end: en.value, desc: f.querySelector('#desc').value.trim(), sent: W.TODAY, status: 'Recorded', file: f.querySelector('#mc').files.length > 0 });
       W.store.set('absences', list);
       W.notify(me.name + ' recorded ' + cat.value + ' from ' + W.fmtDate(st.value) + ' to ' + W.fmtDate(en.value) + '.' + (hit.length ? ' ' + hit.length + ' assigned shift(s) need a stand-in.' : ''), 'rachel.lim');
       W.modal({ title: 'Absence recorded', html: '<p>' + W.esc(cat.value) + ', ' + W.fmtDate(st.value, { noDay: true }) + ' – ' + W.fmtDate(en.value, { noDay: true, year: true }) + '.</p>' +
@@ -196,7 +199,7 @@
 
   W.controls([
     { label: 'Show absence "missing dates" error', onClick: function () {
-        tab = 'absence'; render(); var f = document.getElementById('abs-form'); f.querySelector('#cat').value = 'Medical Leave'; f.requestSubmit ? f.requestSubmit() : f.querySelector('[type=submit]').click();
+        tab = 'absence'; render(); var f = document.getElementById('abs-form'); f.querySelector('#cat').value = 'Medical (MC)'; f.querySelector('#shift').value = 'Both shifts'; f.requestSubmit ? f.requestSubmit() : f.querySelector('[type=submit]').click();
       } },
     { label: 'Reset incoming swap request', onClick: function () { W.store.set('incoming', null); tab = 'incoming'; render(); } }
   ]);

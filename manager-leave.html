@@ -14,17 +14,17 @@
 <main id="main">
   <!-- Fig 5.6.1 Record absence – Manager (FR-23), 5.6.6 Consolidated leave records (FR-36, FR-41). UC-05, UC-15. -->
   <div class="page-head">
-    <div><h1>Leave Records</h1><p class="sub">Leave, medical certificates and unavailability notes for all staff. Reasons and certificates are visible to Managers only.</p></div>
+    <div><h1>Leave Records</h1><p class="sub">Leave, preferred off-days, medical certificates and unavailability notes for all staff. Reasons and certificates are visible to Managers only.</p></div>
     <button class="btn primary" id="add" type="button">Record absence</button>
   </div>
   <div id="flash"></div>
   <form class="card filters" id="filters" style="margin-bottom:16px">
     <div class="field"><label for="from">From</label><input type="date" id="from" value="2026-11-30"></div>
     <div class="field"><label for="to">To</label><input type="date" id="to" value="2026-12-31"></div>
-    <div class="field"><label for="cat">Leave category</label><select id="cat"><option value="">All categories</option><option>Medical Leave</option><option>Emergency Leave</option><option>Annual Leave</option><option>Other</option></select></div>
+    <div class="field"><label for="cat">Leave category</label><select id="cat"><option value="">All categories</option><option>Medical (MC)</option><option>Annual Leave</option><option>Urgent Leave</option><option>Compassionate Leave</option><option>Preferred off-day</option></select></div>
     <div class="field"><label for="name">Staff name or ID</label><input type="text" id="name"></div>
   </form>
-  <div class="table-wrap"><table><thead><tr><th>Staff</th><th>Category</th><th>Dates</th><th>Reason <span class="conf">(confidential)</span></th><th>Medical certificate</th><th>Recorded</th></tr></thead><tbody id="rows"></tbody></table></div>
+  <div class="table-wrap"><table><thead><tr><th>Staff</th><th>Category</th><th>Dates and shift</th><th>Reason <span class="conf">(confidential)</span></th><th>Medical certificate</th><th>Recorded</th></tr></thead><tbody id="rows"></tbody></table></div>
   <p class="muted small" id="count" style="margin-top:8px"></p>
 </main>
 <script src="assets/wms.js"></script>
@@ -34,14 +34,14 @@
   var W = WMS, R = W.R;
   function render() {
     var f = document.getElementById('from').value, t = document.getElementById('to').value, c = document.getElementById('cat').value, q = document.getElementById('name').value.trim().toLowerCase();
-    var list = R.leaves().filter(function (l) {
+    var list = R.leaves().concat(R.prefOffDays()).filter(function (l) {
       var s = R.BY_ID[l.staff] || { name: l.staff, id: l.staff };
       return (!f || l.end >= f) && (!t || l.start <= t) && (!c || l.cat === c) && (!q || (s.name + ' ' + s.id).toLowerCase().indexOf(q) >= 0);
     }).sort(function (a, b) { return a.start < b.start ? -1 : 1; });
     document.getElementById('rows').innerHTML = list.map(function (l) {
       var s = R.BY_ID[l.staff] || { name: l.staff, role: '', id: l.staff };
-      return '<tr><td><strong>' + s.name + '</strong><span class="small muted" style="display:block">' + s.role + ' · ' + s.id + '</span></td><td>' + l.cat + '</td>' +
-        '<td>' + W.fmtDate(l.start) + (l.end !== l.start ? ' – ' + W.fmtDate(l.end) : '') + '</td><td>' + W.esc(l.reason) + '</td>' +
+      return '<tr><td><strong>' + s.name + '</strong><span class="small muted" style="display:block">' + s.role + ' · ' + s.id + '</span></td><td>' + (l.pref ? '<span class="chip warn">Preferred off-day</span>' : l.cat) + '</td>' +
+        '<td>' + W.fmtDate(l.start) + (l.end !== l.start ? ' – ' + W.fmtDate(l.end) : '') + '<span class="small muted" style="display:block">' + (l.shift || 'Both shifts') + '</span></td><td>' + W.esc(l.reason) + '</td>' +
         '<td>' + (l.mc ? '<button class="btn small" data-mc="' + l.id + '">View MC</button>' : '<span class="muted">None</span>') + '</td>' +
         '<td>' + W.esc(l.by) + '<span class="small muted" style="display:block">' + W.fmtDate(l.recorded, { noDay: true }) + '</span></td></tr>';
     }).join('') || '<tr><td colspan="6" class="muted">No records match these filters.</td></tr>';
@@ -62,24 +62,26 @@
     var opts = R.STAFF.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).map(function (s) { return '<option value="' + s.id + '">' + s.name + ' (' + s.id + ', ' + s.role + ')</option>'; }).join('');
     W.modal({ title: 'Record absence', html: '<p class="hint" style="margin-top:0">Fields marked * are required.</p><div class="form-summary"></div>' +
       '<div class="field"><label for="a-staff">Staff member<span class="req" aria-hidden="true">*</span></label><select id="a-staff"><option value="">Select a staff member</option>' + opts + '</select></div>' +
-      '<div class="field"><label for="a-cat">Absence category<span class="req" aria-hidden="true">*</span></label><select id="a-cat"><option value="">Select a category</option><option>Medical Leave</option><option>Emergency Leave</option><option>Annual Leave</option><option>Other</option></select></div>' +
+      '<div class="field"><label for="a-cat">Absence category<span class="req" aria-hidden="true">*</span></label><select id="a-cat"><option value="">Select a category</option><option>Medical (MC)</option><option>Annual Leave</option><option>Urgent Leave</option><option>Compassionate Leave</option></select></div>' +
       '<div class="grid-2"><div class="field"><label for="a-start">Start date<span class="req" aria-hidden="true">*</span></label><input type="date" id="a-start"></div><div class="field"><label for="a-end">End date<span class="req" aria-hidden="true">*</span></label><input type="date" id="a-end"></div></div>' +
+      '<div class="field"><label for="a-shift">Shift affected<span class="req" aria-hidden="true">*</span></label><select id="a-shift"><option value="">Select a shift</option><option>Both shifts</option><option>Day 08:00–20:00</option><option>Night 20:00–08:00</option></select></div>' +
       '<div class="field"><label for="a-desc">Description</label><textarea id="a-desc"></textarea></div>' +
       '<div class="field"><label for="a-mc">Medical certificate</label><input type="file" id="a-mc" accept=".pdf,.jpg,.png"></div>',
       actions: [{ label: 'Cancel' }, { label: 'Record absence', primary: true, onClick: function (o) {
         W.clearErrors(o);
-        var st = o.querySelector('#a-staff'), cat = o.querySelector('#a-cat'), s = o.querySelector('#a-start'), e = o.querySelector('#a-end'), miss = [];
+        var st = o.querySelector('#a-staff'), cat = o.querySelector('#a-cat'), s = o.querySelector('#a-start'), e = o.querySelector('#a-end'), sh = o.querySelector('#a-shift'), miss = [];
         if (!st.value) W.setError(st, 'Select the staff member.');
         if (!cat.value) W.setError(cat, 'Select an absence category.');
         if (!s.value) { W.setError(s, 'Enter a start date.'); miss.push('start date'); }
         if (!e.value) { W.setError(e, 'Enter an end date.'); miss.push('end date'); }
         if (s.value && e.value && e.value < s.value) W.setError(e, 'End date must be on or after the start date.');
+        if (!sh.value) W.setError(sh, 'Select the shift affected, or Both shifts.');
         if (o.querySelector('[aria-invalid]')) { W.summary(o, miss.length ? 'Submission denied – missing ' + miss.join(' and ') + '.' : 'Submission denied. Fix the fields marked below.'); o.querySelector('[aria-invalid]').focus(); return true; }
         var list = W.store.get('mgr.leave', []);
-        list.unshift({ id: 'L-M' + (list.length + 1), staff: st.value, cat: cat.value, start: s.value, end: e.value, reason: o.querySelector('#a-desc').value.trim() || '–', mc: o.querySelector('#a-mc').files.length > 0, by: 'Rachel Lim', recorded: W.TODAY });
+        list.unshift({ id: 'L-M' + (list.length + 1), staff: st.value, cat: cat.value, shift: sh.value, start: s.value, end: e.value, reason: o.querySelector('#a-desc').value.trim() || '–', mc: o.querySelector('#a-mc').files.length > 0, by: 'Rachel Lim', recorded: W.TODAY });
         W.store.set('mgr.leave', list);
         /* rostered shifts in the period become unstaffed positions for Swaps & Stand-ins */
-        var r = R.roster(), hit = R.seatsOf(st.value, r).filter(function (x) { var d = R.SLOTS[x.slot].date; return d >= s.value && d <= e.value; });
+        var r = R.roster(), hit = R.seatsOf(st.value, r).filter(function (x) { var d = R.SLOTS[x.slot].date; return d >= s.value && d <= e.value && (sh.value === 'Both shifts' || sh.value.indexOf(R.SLOTS[x.slot].slot) === 0); });
         if (hit.length) {
           var rej = R.rejections();
           hit.forEach(function (x) { r[x.slot][x.amb][x.seat] = null; rej.push({ staff: st.value, slot: x.slot, amb: x.amb, seat: x.seat, reason: cat.value + ' recorded by Manager.', why: cat.value }); });

@@ -97,7 +97,7 @@ WMS.openInbox();</div>
 
   <section>
     <h2>8. Prototype controls</h2>
-    <p>Buttons that switch a page into states that depend on time or other people (after the cutoff, 24 hours later). They sit below the page in a dashed box and are not part of the design: crop them out of report screenshots.</p>
+    <p>Buttons that switch a page into states that depend on time or other people (after the cutoff, 24 hours later). When the page is open in the device preview (<code>index.html</code>), they appear in the controls panel beside the device under "This screen", so screenshots of the device never include them. The <code>pressed</code> value turns a button into an on/off toggle.</p>
     <div class="code">WMS.controls([
   { label: 'Simulate cutoff passed', pressed: false, onClick: function () { /* change state */ return true; } }
 ]);</div>

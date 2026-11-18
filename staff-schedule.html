@@ -29,6 +29,14 @@
   .big { font-size: 34px; font-weight: 800; line-height: 1.1; }
   .team td { font-size: 14px; white-space: nowrap; }
   .team .state { display: block; font-weight: 600; }
+  .dash h2 { margin: 0 0 10px; font-size: 18px; }
+  .dash details { margin-top: 10px; font-size: 14px; color: var(--muted); }
+  .dash summary { cursor: pointer; color: var(--brand-2); font-weight: 600; min-height: 44px; display: flex; align-items: center; }
+  .dash details p { margin: 4px 0 0; }
+  .dash-top { margin-bottom: 16px; }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; font-size: 15px; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; font-weight: 600; }
 </style>
 </head>
 <body data-group="staff" data-active="schedule">
@@ -43,32 +51,47 @@
   </div>
   <div id="flash"></div>
 
-  <div class="row">
-    <section class="col-main" aria-labelledby="wk-h">
-      <h2 id="wk-h" class="sr-only">My shifts by week</h2>
-      <div class="tabs" role="tablist" id="week-tabs"></div>
-      <div id="week-banner"></div>
-      <div class="week-grid" id="week-grid"></div>
-      <p class="hint" style="margin-top:8px">Select a published shift to reject it or request a swap.</p>
+  <!-- NFR-06: modular cards by workflow, longer text kept in collapsible summaries -->
+  <div class="grid-2 dash-top">
+    <section class="card dash" aria-labelledby="cur-h">
+      <h2 id="cur-h">Current shift</h2>
+      <div id="cur-shift"></div>
+      <details><summary>What to do before this shift</summary><p>Arrive 15 minutes early for the vehicle check and crew handover. If you cannot make it, record an absence under Requests so your Manager can find a stand-in.</p></details>
     </section>
-
-    <aside class="col-side stack" aria-label="My hours">
-      <div class="card meter">
-        <h2 style="margin:0">Hours – November 2026</h2>
-        <div><span class="big" id="month-total"></span> <span class="muted">assigned</span></div>
-        <div id="month-bars"></div>
-      </div>
-      <div class="card">
-        <h2 style="margin:0 0 4px">This week</h2>
-        <p style="margin:0"><span class="big" id="week-hours"></span> <span class="muted">across <span id="week-count"></span> shifts</span></p>
-      </div>
-    </aside>
+    <section class="card dash" aria-labelledby="veh-h">
+      <h2 id="veh-h">Vehicle assignment</h2>
+      <div id="vehicle"></div>
+      <details><summary>About vehicle assignment</summary><p>Your ambulance can change from shift to shift. Patient details for active jobs appear under Dispatch and disappear 24 hours after the shift ends.</p></details>
+    </section>
   </div>
 
-  <section class="section" aria-labelledby="team-h">
-    <h2 id="team-h">Team this week</h2>
-    <p class="hint" style="margin:-6px 0 10px">Colleagues show only Active, On Leave or Unavailable. Reasons are never shown.</p>
+  <section class="card dash section" aria-labelledby="wk-h">
+    <h2 id="wk-h">Weekly schedule</h2>
+    <div class="row">
+      <div class="col-main">
+        <div class="tabs" role="tablist" id="week-tabs" aria-label="Weeks"></div>
+        <div id="week-banner"></div>
+        <div class="week-grid" id="week-grid"></div>
+        <details><summary>How to reject or swap a shift</summary><p>Select a published shift to reject it or request a swap. A rejection needs a reason and your Manager is told straight away. Tentative weeks are drafts and can still change.</p></details>
+      </div>
+      <aside class="col-side stack" aria-label="My hours">
+        <div class="meter">
+          <h3 style="margin:0">Hours – November 2026</h3>
+          <div><span class="big" id="month-total"></span> <span class="muted">assigned</span></div>
+          <div id="month-bars"></div>
+        </div>
+        <div>
+          <h3 style="margin:0 0 4px">This week</h3>
+          <p style="margin:0"><span class="big" id="week-hours"></span> <span class="muted">across <span id="week-count"></span> shifts</span></p>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <section class="card dash section" aria-labelledby="team-h">
+    <h2 id="team-h">Team members</h2>
     <div id="team"></div>
+    <details><summary>What colleagues can see</summary><p>Colleagues show only Active, On Leave or Unavailable. Reasons are never shown.</p></details>
   </section>
 </main>
 
@@ -250,6 +273,24 @@
         render(); return on;
       } }
   ]);
+})();
+</script>
+
+<script>
+/* NFR-06: Current shift and Vehicle assignment cards */
+(function () {
+  var W = window.WMS; if (!W) return;
+  var REG = { 'AMB-03': 'SJA 4821 C', 'AMB-05': 'SJA 5137 K' };
+  var mine = W.MY_SHIFTS.filter(function (s) { return s.date >= W.TODAY; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+  var cur = mine[0], cs = document.getElementById('cur-shift'), vh = document.getElementById('vehicle');
+  if (!cur) { cs.innerHTML = '<p class="muted">No upcoming shifts.</p>'; vh.innerHTML = '<p class="muted">No ambulance assigned.</p>'; return; }
+  var today = cur.date === W.TODAY;
+  cs.innerHTML = '<p style="margin:0 0 8px"><span class="chip ' + (today ? 'ok' : '') + '">' + (today ? 'Today' : 'Next shift') + '</span></p>' +
+    '<dl class="kv"><dt>Date</dt><dd>' + W.fmtDate(cur.date) + '</dd><dt>Shift</dt><dd>' + cur.slot + ' ' + W.SLOT_TIME[cur.slot] + '</dd><dt>Ambulance</dt><dd>' + cur.amb + '</dd></dl>';
+  var wk = W.MY_SHIFTS.filter(function (s) { return s.week === cur.week; }), ambs = {};
+  wk.forEach(function (s) { ambs[s.amb] = (ambs[s.amb] || 0) + 1; });
+  vh.innerHTML = '<dl class="kv">' + Object.keys(ambs).map(function (a) { return '<dt>' + a + '</dt><dd>' + (REG[a] || '') + ' <span class="muted small" style="font-weight:400">' + ambs[a] + (ambs[a] === 1 ? ' shift' : ' shifts') + ' this week</span></dd>'; }).join('') + '</dl>' +
+    '<p style="margin:10px 0 0"><a class="btn" href="staff-dispatch.html">Open dispatch details</a></p>';
 })();
 </script>
 </body>

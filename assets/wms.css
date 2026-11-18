@@ -204,3 +204,11 @@ body.auth { min-height: 100vh; background: radial-gradient(circle at 15% 10%, #1
   .proto { padding: 0 8px; }
   .inbox { right: 8px; }
 }
+
+/* FR-04: staff above 40 h highlighted in yellow (warning only) */
+tr.over40 > td { background: #fff3bf; }
+tr.over40 > td:first-child { box-shadow: inset 4px 0 0 #e0a800; }
+
+/* NFR-08: role-based access denied page */
+.denied-box { max-width: 560px; margin: 12vh auto; padding: 0 16px; }
+.denied-box h1 { font-size: 22px; margin: 0 0 8px; }

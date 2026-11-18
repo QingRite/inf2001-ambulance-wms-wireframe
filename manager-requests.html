@@ -48,7 +48,7 @@
   }
   function save(req) {
     var key = req._src === 'staff' ? 'lateRequests' : 'mgr.lateSeed';
-    var list = W.store.get(key, []).map(function (x) { return x.id === req.id ? Object.assign({}, x, { status: req.status, decided: W.TODAY }) : x; });
+    var list = W.store.get(key, []).map(function (x) { return x.id === req.id ? Object.assign({}, x, { status: req.status, decided: W.TODAY, comment: req.comment || '' }) : x; });
     W.store.set(key, list);
   }
   function chip(st) { return /Approved/.test(st) ? '<span class="chip ok">' + W.ICONS.check + ' Approved</span>' : /Rejected/.test(st) ? '<span class="chip err">Rejected</span>' : '<span class="chip">' + W.ICONS.clock + ' Pending</span>'; }
@@ -65,6 +65,7 @@
       return '<article class="card req"><div class="page-head" style="margin:0"><div><h2>' + W.esc(x.staff) + '</h2><span class="small muted">' + (s ? s.role + ' · ' + s.id : '') + ' · ' + x.id + '</span></div>' + chip(x.status) + '</div>' +
         '<dl><dt>Week</dt><dd>' + W.fmtDate(x.week, { noDay: true }) + ' – ' + W.fmtDate(W.addDays(x.week, 6), { noDay: true, year: true }) + '</dd><dt>Change</dt><dd><strong>' + W.esc(x.change) + '</strong></dd><dt>Sent</dt><dd>' + W.fmtDate(x.sent) + ', after the cutoff</dd></dl>' +
         '<p class="reason"><span class="small muted" style="display:block">Reason given</span>' + W.esc(x.reason) + '</p>' +
+        (x.comment ? '<p class="reason"><span class="small muted" style="display:block">Manager comment</span>' + W.esc(x.comment) + '</p>' : '') +
         (/Pending/.test(x.status) ? '<div class="actions"><button class="btn danger" data-rej="' + x.id + '">Reject</button><button class="btn primary" data-ok="' + x.id + '">Approve</button></div>' : '') + '</article>';
     }).join('') || '<p class="muted">No requests here.</p>';
     document.querySelectorAll('[data-ok]').forEach(function (b) { b.addEventListener('click', function () { decide(b.getAttribute('data-ok'), true); }); });
@@ -76,12 +77,14 @@
     var req = all().filter(function (x) { return x.id === id; })[0];
     W.modal({
       title: ok ? 'Approve this late request?' : 'Reject this late request?',
-      html: '<p><strong>' + W.esc(req.staff) + '</strong>: ' + W.esc(req.change) + '</p><p class="muted">' + (ok ? 'Their availability for the week of ' + W.fmtDate(req.week, { noDay: true }) + ' will be updated, and they will be notified.' : 'Their existing availability stays as it is, and they will be notified.') + '</p>',
-      actions: [{ label: 'Cancel' }, { label: ok ? 'Approve' : 'Reject', primary: true, danger: !ok, onClick: function () {
-        req.status = ok ? 'Approved' : 'Rejected'; save(req);
+      html: '<p><strong>' + W.esc(req.staff) + '</strong>: ' + W.esc(req.change) + '</p><p class="muted">' + (ok ? 'Their availability for the week of ' + W.fmtDate(req.week, { noDay: true }) + ' will be updated, and they will be notified.' : 'Their existing availability stays as it is, and they will be notified.') + '</p>' +
+        '<div class="field"><label for="m-comment">Comment for ' + W.esc(req.staff) + ' (optional)</label><textarea id="m-comment" placeholder="' + (ok ? 'e.g. Approved, thanks for letting me know early.' : 'e.g. Rejected, Wed nights are already short.') + '"></textarea></div>',
+      actions: [{ label: 'Cancel' }, { label: ok ? 'Approve' : 'Reject', primary: true, danger: !ok, onClick: function (o) {
+        var cm = o.querySelector('#m-comment').value.trim();
+        req.status = ok ? 'Approved' : 'Rejected'; req.comment = cm; save(req);
         if (ok && typeof req.slot === 'number') { var o = W.store.get('availOverride', {}); o[req.staffId + '|' + req.slot] = req.avail; W.store.set('availOverride', o); }
-        if (USERS[req.staff]) W.notify('Your late availability request (' + req.change + ') was ' + (ok ? 'approved. Your availability has been updated.' : 'rejected. Your availability is unchanged.'), USERS[req.staff]);
-        W.audit(ok ? 'Late request approved' : 'Late request rejected', req.staff + ' – ' + req.id, 'Pending', ok ? 'Approved: ' + req.change : 'Rejected');
+        if (USERS[req.staff]) W.notify('Your late availability request (' + req.change + ') was ' + (ok ? 'approved. Your availability has been updated.' : 'rejected. Your availability is unchanged.') + (cm ? ' Manager comment: "' + cm + '"' : ''), USERS[req.staff]);
+        W.audit(ok ? 'Late request approved' : 'Late request rejected', req.staff + ' – ' + req.id, 'Pending', (ok ? 'Approved: ' + req.change : 'Rejected') + (cm ? ' (comment: ' + cm + ')' : ''));
         document.getElementById('flash').innerHTML = '<div class="banner ok" role="status">' + W.ICONS.check + '<p><strong>Request ' + (ok ? 'approved' : 'rejected') + '.</strong> ' + W.esc(req.staff) + (ok ? "'s availability has been updated" : "'s availability is unchanged") + ' and they have been notified.</p></div>';
         render();
       } }]

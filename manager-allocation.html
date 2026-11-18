@@ -38,7 +38,8 @@
        5.2.7 Publish prompt, 5.2.8 Publish blocked, 5.2.9 Published (FR-35, FR-05, FR-06). UC-10, UC-16. -->
   <div class="page-head">
     <div><h1>Allocation</h1><p class="sub">Week 07 – 13 Dec 2026 · publish by <span id="by"></span></p></div>
-    <div class="actions"><span id="status-chip"></span><button class="btn primary" id="publish" type="button">Publish roster</button></div>
+    <div><div class="actions"><span id="status-chip"></span><button class="btn primary" id="publish" type="button">Publish roster</button></div>
+      <label class="choice small" style="justify-content:flex-end;margin-top:6px"><input type="checkbox" id="auto-pub"> Publish automatically at the deadline if every slot meets the minimum</label></div>
   </div>
   <div id="flash"></div>
 
@@ -56,6 +57,10 @@
       <h2 id="pool-h">Staff</h2>
       <div id="pool-msg"></div>
       <div class="field" style="margin-bottom:8px"><label for="pq">Search name or ID</label><input type="text" id="pq"></div>
+      <div class="grid-2" style="gap:8px">
+        <div class="field" style="margin-bottom:8px"><label for="prole">Role</label><select id="prole"><option value="">All roles</option><option>Driver</option><option>Care Assistant</option><option>Paramedic</option></select></div>
+        <div class="field" style="margin-bottom:8px"><label for="pqual">Qualification</label><select id="pqual"><option value="">Any</option><option>Class 3 licence</option><option>Class 4 licence</option><option>Basic Life Support</option><option>Advanced Life Support</option><option>Paramedic registration</option><option>Patient handling</option></select></div>
+      </div>
       <label class="choice"><input type="checkbox" id="only-av" checked> Show only staff available for this slot</label>
       <div class="actions left" style="margin:6px 0"><button class="btn small" id="cmp-btn" type="button" disabled>Compare (0)</button><span class="hint">Tick up to 3 staff to compare.</span></div>
       <div class="pool" id="pool"></div>
@@ -91,8 +96,8 @@
       t += '<tr><th scope="row">' + name + '<span class="small muted" style="display:block;font-weight:400">' + W.SLOT_TIME[name] + '</span></th>';
       for (var d = 0; d < 7; d++) {
         var i = d * 2 + k, f = R.fullCount(i, r), short = f < R.MIN_FULL;
-        t += '<td><button type="button" class="slotbtn' + (short ? ' short' : '') + '" data-i="' + i + '" aria-pressed="' + (i === slot) + '" aria-label="' + R.slotLabel(i) + ': ' + f + ' of 6 fully staffed' + (short ? ', below minimum' : '') + '">' +
-          '<span>' + f + ' / 6</span><span class="small">' + (short ? SM('alert') + ' Below' : 'Meets') + '</span></button></td>';
+        t += '<td><button type="button" class="slotbtn' + (short ? ' short' : '') + '" data-i="' + i + '" aria-pressed="' + (i === slot) + '" >' +
+          '<span class="sr-only">' + R.slotLabel(i) + ', ambulances fully staffed: </span><span>' + f + ' / 6</span> <span class="small">' + (short ? SM('alert') + ' Below' : 'Meets') + '</span><span class="sr-only"> minimum</span></button></td>';
       }
       t += '</tr>';
     });
@@ -136,7 +141,9 @@
     var r = R.roster(), role = seat ? R.ROLE_OF_SEAT[seat.key] : null;
     document.getElementById('pool-h').textContent = seat ? 'Choose a ' + role + ' for ' + seat.amb : 'Staff';
     var q = document.getElementById('pq').value.trim().toLowerCase(), onlyAv = document.getElementById('only-av').checked;
-    var list = R.STAFF.filter(function (s) { return (!role || s.role === role) && (!q || (s.name + ' ' + s.id).toLowerCase().indexOf(q) >= 0); })
+    var rs = document.getElementById('prole'), qual = document.getElementById('pqual').value;
+    if (seat) { rs.value = role; rs.disabled = true; } else { rs.disabled = false; role = rs.value || null; }   // a selected seat fixes the role
+    var list = R.STAFF.filter(function (s) { return (!role || s.role === role) && (!qual || s.certs.indexOf(qual) >= 0) && (!q || (s.name + ' ' + s.id).toLowerCase().indexOf(q) >= 0); })
       .map(function (s) { return { s: s, h: R.hours(s.id, r), av: availability(s.id) }; })
       .filter(function (x) { return !onlyAv || q || x.av.code === 'av'; })
       .sort(function (a, b) { return (a.av.code === 'av' ? 0 : 1) - (b.av.code === 'av' ? 0 : 1) || a.h - b.h || a.s.name.localeCompare(b.s.name); })
@@ -146,7 +153,7 @@
       var s = x.s, checked = compare.indexOf(s.id) >= 0, dis = !checked && compare.length >= 3;
       return '<div class="pool-row"><input type="checkbox" data-c="' + s.id + '" aria-label="Compare ' + s.name + '"' + (checked ? ' checked' : '') + (dis ? ' disabled title="Compare up to 3 staff"' : '') + '>' +
         '<div><strong>' + s.name + '</strong> <span class="muted small">' + s.id + '</span><span class="meta">' + s.role + ' · ' + x.h + ' h this week' + (x.h > 40 ? ' · <strong>Over 40 h</strong>' : '') + '</span>' +
-        '<span class="meta">Prefers ' + s.pref + ' · ' + s.duty + ' · ' + s.base + '</span><span style="display:block;margin-top:4px">' + x.av.chip + '</span></div>' +
+        '<span class="meta">Prefers ' + s.pref + ' · ' + s.duty + ' · ' + s.base + '</span><span class="meta">' + s.certs.join(' · ') + '</span><span style="display:block;margin-top:4px">' + x.av.chip + '</span></div>' +
         (seat && !locked() ? '<button type="button" class="btn small" data-as="' + s.id + '">Assign</button>' : '<span></span>') + '</div>';
     }).join('') || '<p class="muted">No staff match. Untick "Show only staff available" to see everyone.</p>';
     var p = document.getElementById('pool'); p.innerHTML = html;
@@ -191,11 +198,12 @@
     W.modal({ title: 'Compare staff', html: '<p class="muted" style="margin-top:0">For ' + R.slotLabel(slot) + '</p><div class="cmp">' + compare.map(function (id) {
       var s = R.BY_ID[id], av = availability(id);
       return '<div><strong>' + s.name + '</strong><dl style="margin:0"><dt>Role</dt><dd>' + s.role + '</dd><dt>Hours this week</dt><dd>' + R.hours(id, r) + ' h</dd>' +
-        '<dt>Preference</dt><dd>' + s.pref + ', ' + s.duty + '</dd><dt>Location zone</dt><dd>' + s.base + '</dd><dt>This slot</dt><dd>' + av.chip + '</dd></dl></div>';
+        '<dt>Preference</dt><dd>' + s.pref + ', ' + s.duty + '</dd><dt>Qualifications</dt><dd>' + s.certs.join(', ') + '</dd><dt>Preferred ambulance</dt><dd>' + (s.amb || 'No preference') + '</dd><dt>Location zone</dt><dd>' + s.base + '</dd><dt>This slot</dt><dd>' + av.chip + '</dd></dl></div>';
     }).join('') + '</div>', actions: [{ label: 'Close', primary: true }] });
   });
   document.getElementById('pq').addEventListener('input', renderPool);
   document.getElementById('only-av').addEventListener('change', renderPool);
+  ['prole', 'pqual'].forEach(function (id) { document.getElementById(id).addEventListener('change', renderPool); });
 
   /* FR-35: publish only when every slot has at least 6 fully staffed ambulances (same rule as WeeklyRoster.checkStaffingRequirements) */
   document.getElementById('publish').addEventListener('click', function () {
@@ -210,14 +218,31 @@
       return;
     }
     W.modal({ title: 'Publish roster for 07 – 13 Dec 2026?', html: '<p>Every slot has at least 6 fully staffed ambulances. All ' + R.STAFF.length + ' operational staff will be notified and the roster becomes read-only.</p>',
-      actions: [{ label: 'Cancel' }, { label: 'Publish', primary: true, onClick: function () {
-        W.store.set('published0712', true);
-        ['nur.aisyah', 'ravi.kumar', 'marcus.tan'].forEach(function (u) { W.notify('Your roster for 07 – 13 Dec 2026 has been published.', u); });
-        W.audit('Roster published', 'Week 07 – 13 Dec 2026', 'Draft', 'Published');
-        flash('ok', '<p><strong>Roster published.</strong> ' + R.STAFF.length + ' staff have been notified. Later changes go through Swaps &amp; Stand-ins.</p>');
-        render();
-      } }] });
+      actions: [{ label: 'Cancel' }, { label: 'Publish', primary: true, onClick: function () { publishNow(false); } }] });
   });
+  function publishNow(auto) {
+    W.store.set('published0712', true);
+    ['nur.aisyah', 'ravi.kumar', 'marcus.tan'].forEach(function (u) { W.notify('Your roster for 07 – 13 Dec 2026 has been published.', u); });
+    W.audit(auto ? 'Roster auto-published' : 'Roster published', 'Week 07 – 13 Dec 2026', 'Draft', 'Published');
+    flash('ok', '<p><strong>Roster ' + (auto ? 'published automatically at the deadline' : 'published') + '.</strong> ' + R.STAFF.length + ' staff have been notified. Later changes go through Swaps &amp; Stand-ins.</p>');
+    render();
+  }
+  /* NFR-17: at Mon 08:00 the roster publishes itself if the FR-06 / FR-35 checks pass; otherwise it stays in Draft and the Manager is alerted */
+  var ap = document.getElementById('auto-pub');
+  ap.checked = W.store.get('autoPublish', true);
+  ap.addEventListener('change', function () { W.store.set('autoPublish', ap.checked); W.toast(ap.checked ? 'The roster will publish itself at the deadline if every slot meets the minimum.' : 'Automatic publishing is off. Publish by hand before the deadline.'); });
+  function deadline() {
+    if (locked()) { W.toast('This roster is already published.'); return; }
+    var short = R.shortSlots();
+    if (short.length) {
+      W.notify('Publication deadline reached. Roster for 07 – 13 Dec 2026 is still in Draft: ' + short.length + (short.length === 1 ? ' slot has' : ' slots have') + ' fewer than six fully staffed ambulances.');
+      flash('err', '<p><strong>Deadline passed – roster kept in Draft.</strong> ' + short.length + (short.length === 1 ? ' slot has' : ' slots have') + ' fewer than six fully staffed ambulances. Fix them, then publish.</p>');
+    } else if (ap.checked) publishNow(true);
+    else {
+      W.notify('Publication deadline reached. Roster for 07 – 13 Dec 2026 meets every check but has not been published.');
+      flash('err', '<p><strong>Deadline passed – roster not published.</strong> Every slot meets the minimum. Publish now so staff get 7 days\' notice.</p>');
+    }
+  }
 
   function render() { renderHead(); renderSlots(); renderBoards(); renderPool(); }
   if (locked()) flash('ok', '<p><strong>This roster is published.</strong> Use Swaps &amp; Stand-ins for changes.</p>');
@@ -230,6 +255,7 @@
     } };
   });
   W.controls(ctl.concat([
+    { label: 'Simulate Mon 30 Nov, 08:00 deadline (NFR-17)', onClick: deadline },
     { label: 'Reset roster to starting draft', onClick: function () { W.store.set('roster.0712', null); W.store.set('published0712', false); W.store.set('mgr.rejections', null); location.href = 'manager-allocation.html'; } }
   ]));
 })();

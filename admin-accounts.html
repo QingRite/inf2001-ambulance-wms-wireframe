@@ -57,21 +57,31 @@
     document.querySelectorAll('[data-deact]').forEach(function (b) { b.addEventListener('click', function () { deactivate(b.getAttribute('data-deact')); }); });
   }
 
+  var CERTS = ['Class 3 licence', 'Class 4 licence', 'Basic Life Support', 'Advanced Life Support', 'Paramedic registration', 'Patient handling'];
   function formHtml(a) {
+    var have = (a && a.certs) || [];
+    var certs = CERTS.map(function (c, k) { return '<label class="choice"><input type="checkbox" name="f-cert" value="' + c + '"' + (have.indexOf(c) >= 0 ? ' checked' : '') + '> ' + c + '</label>'; }).join('');
     var roles = R.ROLES.map(function (r) { return '<option' + (a && a.role === r ? ' selected' : '') + '>' + r + '</option>'; }).join('');
     return '<p class="hint" style="margin-top:0">Fields marked * are required.</p><div class="form-summary"></div>' +
       '<div class="field"><label for="f-name">Full name<span class="req" aria-hidden="true">*</span></label><input type="text" id="f-name" value="' + (a ? W.esc(a.name) : '') + '"></div>' +
+      '<div class="field"><label for="f-id">Employee ID<span class="req" aria-hidden="true">*</span></label><input type="text" id="f-id" value="' + (a ? a.staffId : '') + '"' + (a ? ' disabled' : '') + '><p class="hint">Role prefix and number, e.g. PM-63 or DRV-32</p></div>' +
       '<div class="field"><label for="f-user">Username<span class="req" aria-hidden="true">*</span></label><input type="text" id="f-user" value="' + (a ? a.username : '') + '"' + (a ? ' disabled' : '') + '><p class="hint">Lowercase letters and dots, e.g. mei.ling.tan</p></div>' +
       '<div class="field"><label for="f-email">Work email<span class="req" aria-hidden="true">*</span></label><input type="text" id="f-email" value="' + (a ? a.email : '') + '"></div>' +
       '<div class="field"><label for="f-role">Role<span class="req" aria-hidden="true">*</span></label><select id="f-role"><option value="">Select a role</option>' + roles + '</select></div>' +
+      '<fieldset class="field" id="f-certs"><legend>Certification tags</legend>' + certs + '<p class="hint">Tick every certification this person holds. Used to match staff to vehicles and duties.</p></fieldset>' +
       '<div class="field"><span class="label">Permissions for this role</span><div id="f-perms">' + (a ? permList(a.role) : '<p class="hint">Select a role to see its permissions.</p>') + '</div></div>';
   }
+  function certsOf(o) { return Array.prototype.map.call(o.querySelectorAll('input[name="f-cert"]:checked'), function (c) { return c.value; }); }
   function bindRole(o) { var s = o.querySelector('#f-role'); s.addEventListener('change', function () { o.querySelector('#f-perms').innerHTML = s.value ? permList(s.value) : ''; }); }
   function validate(o, isNew) {
     W.clearErrors(o);
     var n = o.querySelector('#f-name'), u = o.querySelector('#f-user'), e = o.querySelector('#f-email'), r = o.querySelector('#f-role');
     if (!n.value.trim()) W.setError(n, 'Enter the full name.');
     if (isNew) {
+      var id = o.querySelector('#f-id'), iv = id.value.trim().toUpperCase();
+      if (!iv) W.setError(id, 'Enter the employee ID.');
+      else if (!/^[A-Z]{2,3}-\d{2,3}$/.test(iv)) W.setError(id, 'Use the role prefix, a dash and a number, e.g. PM-63.');
+      else if (R.accounts().some(function (x) { return x.staffId === iv; })) W.setError(id, 'This employee ID already has an account.');
       if (!u.value.trim()) W.setError(u, 'Enter a username.');
       else if (!/^[a-z]+(\.[a-z]+)*$/.test(u.value.trim())) W.setError(u, 'Use lowercase letters separated by dots only.');
       else if (R.accounts().some(function (x) { return x.username === u.value.trim(); })) W.setError(u, 'This username is already taken. Try adding a middle name.');
@@ -87,9 +97,9 @@
   document.getElementById('create').addEventListener('click', function () {
     W.modal({ title: 'Create account', html: formHtml(null), onOpen: bindRole, actions: [{ label: 'Cancel' }, { label: 'Create account', primary: true, onClick: function (o) {
       if (!validate(o, true)) return true;
-      var a = { username: o.querySelector('#f-user').value.trim(), name: o.querySelector('#f-name').value.trim(), role: o.querySelector('#f-role').value, staffId: 'NEW-' + (R.accounts().length + 1), status: 'Active', email: o.querySelector('#f-email').value.trim(), created: W.TODAY };
+      var a = { username: o.querySelector('#f-user').value.trim(), name: o.querySelector('#f-name').value.trim(), role: o.querySelector('#f-role').value, staffId: o.querySelector('#f-id').value.trim().toUpperCase(), certs: certsOf(o), status: 'Active', email: o.querySelector('#f-email').value.trim(), created: W.TODAY };
       var list = R.accounts(); list.push(a); R.saveAccounts(list);
-      W.audit('Account created', a.name + ' (' + a.username + ')', '–', a.role);
+      W.audit('Account created', a.name + ' (' + a.username + ', ' + a.staffId + ')', '–', a.role + (a.certs.length ? '; ' + a.certs.join(', ') : ''));
       setTimeout(function () {
         W.modal({ title: 'Account created!', html: '<p><strong>' + W.esc(a.name) + '</strong> can now log in as <strong>' + a.username + '</strong> with the role ' + a.role + '.</p><p class="muted">A one-time password has been sent to ' + W.esc(a.email) + '.</p>', actions: [{ label: 'OK', primary: true }] });
       }, 0);
@@ -107,7 +117,7 @@
       if (!validate(o, false)) return true;
       if (a.username === me.key && o.querySelector('#f-role').value !== a.role) { W.setError(o.querySelector('#f-role'), 'You cannot change your own role.'); return true; }
       var list = R.accounts(), x = list.filter(function (y) { return y.username === username; })[0], prevRole = x.role;
-      x.name = o.querySelector('#f-name').value.trim(); x.email = o.querySelector('#f-email').value.trim(); x.role = o.querySelector('#f-role').value;
+      x.name = o.querySelector('#f-name').value.trim(); x.email = o.querySelector('#f-email').value.trim(); x.role = o.querySelector('#f-role').value; x.certs = certsOf(o);
       R.saveAccounts(list);
       W.audit(prevRole !== x.role ? 'Role changed' : 'Account updated', x.name + ' (' + x.username + ')', prevRole, x.role);
       flash('ok', '<strong>Account updated.</strong> ' + W.esc(x.name) + (prevRole !== x.role ? ' is now ' + x.role + '.' : '.'));
