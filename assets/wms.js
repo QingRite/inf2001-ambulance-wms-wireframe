@@ -173,12 +173,20 @@
     renderInbox();
   }
 
+  /* ---------- Phone frame for the staff app (staff-app.html shows staff pages inside a phone) ---------- */
+  var FRAMED = (function () { try { return window.self !== window.top; } catch (e) { return true; } })();
+  function postParent(msg) { if (FRAMED) { try { window.parent.postMessage(msg, '*'); } catch (e) { /* ignore */ } } }
+  function pageFile() { return location.pathname.split('/').pop() + location.search; }
+
   /* ---------- Shell ---------- */
   var inboxTab = 'inbox';
   function buildShell() {
     var group = document.body.getAttribute('data-group');
+    if (FRAMED) postParent({ type: 'wms-page', path: pageFile(), title: document.title.replace(/ – WMS$/, '') });
     if (!group) return;
+    /* staff pages always open inside the phone frame */
     var u = ensureUser(group);
+    if (group === 'staff' && !FRAMED && !store.get('noframe', false)) { location.replace('staff-app.html?p=' + encodeURIComponent(pageFile())); return; }
     var active = document.body.getAttribute('data-active');
     var skip = '<a class="skip" href="#main">Skip to content</a>';
     var nav = NAV[group].map(function (n) {
@@ -190,7 +198,7 @@
       '<div class="shell-right">' +
       '<div class="who"><span class="who-name">' + esc(u.name) + '</span><span class="who-role">' + esc(u.role) + '</span></div>' +
       '<button class="icon-btn" id="bell" aria-haspopup="true" aria-expanded="false" aria-controls="inbox">' + ICONS.bell + '<span class="badge" id="bell-badge"></span></button>' +
-      '<a class="logout" href="index.html" id="logout">Log out</a>' +
+      '<a class="logout" href="index.html" id="logout"' + (FRAMED ? ' target="_top"' : '') + '>Log out</a>' +
       '</div>' +
       '<div class="inbox" id="inbox" hidden role="region" aria-label="Notifications"></div>' +
       '</div></header>' +
@@ -323,6 +331,19 @@
 
   /* ---------- Prototype controls (shown below the page, outside the design) ---------- */
   function controls(items) {
+    if (FRAMED) {
+      var list = items || [];
+      var send = function () {
+        postParent({ type: 'wms-controls', path: pageFile(), title: document.title.replace(/ – WMS$/, ''),
+          items: list.map(function (it, i) { return { id: i, label: it.label, pressed: typeof it.pressed === 'boolean' ? it.pressed : null }; }) });
+      };
+      window.addEventListener('message', function (e) {
+        var d = e.data || {};
+        if (d.type === 'wms-run' && list[d.id]) { var r = list[d.id].onClick(null); if (typeof r === 'boolean') list[d.id].pressed = r; send(); }
+      });
+      send();
+      return;
+    }
     var sec = document.createElement('aside'); sec.className = 'proto'; sec.setAttribute('aria-label', 'Prototype controls');
     sec.innerHTML = '<div class="proto-inner"><h2>Prototype controls – not part of the design</h2><div class="btns"></div></div>';
     var btns = sec.querySelector('.btns');
@@ -363,7 +384,7 @@
   }
 
   window.WMS = {
-    LOGO_MARK: LOGO_MARK, TODAY: TODAY, PERSONAS: PERSONAS, PASSWORD: PASSWORD, HOME: HOME, NAV: NAV,
+    FRAMED: FRAMED, LOGO_MARK: LOGO_MARK, TODAY: TODAY, PERSONAS: PERSONAS, PASSWORD: PASSWORD, HOME: HOME, NAV: NAV,
     WEEKS: WEEKS, MY_SHIFTS: MY_SHIFTS, COLLEAGUES: COLLEAGUES, SLOT_TIME: SLOT_TIME, ICONS: ICONS,
     store: store, esc: esc, nonWs: nonWs, parse: parse, addDays: addDays, fmtDate: fmtDate, shiftLabel: shiftLabel, ago: ago,
     currentUser: currentUser, ensureUser: ensureUser, login: login, logout: logout,

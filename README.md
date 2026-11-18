@@ -18,7 +18,9 @@ Password for all: `demo1234`. Any other password shows the login-failed state.
 **Prototype date:** every page treats today as **Fri 27 Nov 2026**, so screenshots always show the same dates.
 The week of 07–13 Dec 2026 is the draft roster (same week as the white-box tests in 4.2.5).
 
-**Prototype controls:** the dashed box at the bottom of each logged-in page switches into states that depend on time or on
+**Staff app in a phone:** staff pages always open inside a phone frame (`staff-app.html`), with the prototype controls in a panel beside the phone: switch between Nur Aisyah, Ravi Kumar and Marcus Tan, trigger this screen's states, simulate idle, reset data or log out. Nothing inside the phone is a prototype control.
+
+**Prototype controls:** on Manager and IT Admin pages, the dashed box at the bottom of each page switches into states that depend on time or on
 other people (cutoff passed, roster published, 24 hours later). It is not part of the design. Crop it out of screenshots.
 "Reset prototype data" puts everything back to the starting state. Data is saved in your own browser only.
 
@@ -30,6 +32,7 @@ other people (cutoff passed, roster published, 24 hours later). It is not part o
 | --- | --- | --- | --- |
 | `index.html` | Login | FR-01, FR-31, FR-43 | – |
 | `session-expired.html` | Session expired | NFR-11 | – |
+| `staff-app.html` | Phone frame for the staff pages, with the prototype controls panel | NFR-05, NFR-11 | – |
 | `components.html` | Shared components reference | NFR-07, NFR-18 | – |
 
 **Operational staff** (log in as `nur.aisyah`, `ravi.kumar` or `marcus.tan`)
