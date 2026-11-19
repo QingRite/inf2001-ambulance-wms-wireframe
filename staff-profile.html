@@ -36,8 +36,8 @@
 
   <section class="section" aria-labelledby="dir-h">
     <h2 id="dir-h">Team directory</h2>
-    <p class="hint" style="margin:-6px 0 10px">You can see colleagues' names and roles. Their shifts are on My Schedule; crew lists are on Dispatch.</p>
-    <div class="table-wrap"><table><thead><tr><th>Name</th><th>Role</th><th>Record</th></tr></thead><tbody id="dir"></tbody></table></div>
+    <p class="hint" style="margin:-6px 0 10px">Colleagues' names and roles only. Their contact details and addresses are visible to Managers, not to other staff (NFR-08).</p>
+    <div class="table-wrap"><table><thead><tr><th>Name</th><th>Role</th></tr></thead><tbody id="dir"></tbody></table></div>
   </section>
 </main>
 
@@ -59,21 +59,18 @@
   var team = [['Daniel Ho', 'Paramedic'], ['Siti Rahim', 'Paramedic'], ['Nur Aisyah', 'Paramedic'], ['Ravi Kumar', 'Care Assistant'], ['Jun Wei Lee', 'Care Assistant'], ['Marcus Tan', 'Driver']]
     .filter(function (p) { return p[0] !== me.name; });
   var dir = document.getElementById('dir');
-  dir.innerHTML = team.map(function (p) { return '<tr><td>' + p[0] + '</td><td>' + p[1] + '</td><td><button class="btn small" data-n="' + p[0] + '">View record</button></td></tr>'; }).join('');
-  dir.querySelectorAll('[data-n]').forEach(function (b) {
-    b.addEventListener('click', function () { denied(b.getAttribute('data-n')); });
-  });
+  dir.innerHTML = team.map(function (p) { return '<tr><td>' + p[0] + '</td><td>' + p[1] + '</td></tr>'; }).join('');
 
   /* FR-38 / FR-41: staff may open only their own personal record */
-  function denied(name, detail) {
+  function denied(detail) {
     var f = document.getElementById('flash');
     f.innerHTML = '<div class="banner err" role="alert">' + W.ICONS.alert + '<p><strong>You do not have access to this record.</strong> ' +
-      W.esc(detail || (name + "'s personal details are restricted. Staff can view only their own records; confidential details are visible to Managers only.")) + '</p></div>';
+      W.esc(detail) + '</p></div>';
     f.scrollIntoView({ block: 'start' }); f.querySelector('.banner').setAttribute('tabindex', '-1'); f.querySelector('.banner').focus();
   }
 
   W.controls([
-    { label: "Try to open another ambulance's dispatch", onClick: function () { denied('', 'Dispatch details are shown only for the ambulance you are assigned to (AMB-03). AMB-07 is not your ambulance.'); } }
+    { label: "Try to open another ambulance's dispatch", onClick: function () { denied('Dispatch details are shown only for the ambulance you are assigned to (AMB-03). AMB-07 is not your ambulance.'); } }
   ]);
 })();
 </script>

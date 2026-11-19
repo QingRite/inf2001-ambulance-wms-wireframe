@@ -248,13 +248,23 @@
   if (locked()) flash('ok', '<p><strong>This roster is published.</strong> Use Swaps &amp; Stand-ins for changes.</p>');
   render();
 
+  /* White-box test cases from the M2 report (checkStaffingRequirements). Each loads Mon 07 Dec Day into one path of the CFG. */
+  var WB = { 1: ['no ambulance crewed', 'blocked'], 2: ['AMB-01 missing driver', 'blocked'], 3: ['AMB-01 missing care assistant', 'blocked'],
+             4: ['AMB-01 has one paramedic', 'blocked'], 5: ['only 1 ambulance fully crewed', 'blocked'], 6: ['6 ambulances fully crewed', 'publishes'] };
   var ctl = [1, 2, 3, 4, 5, 6].map(function (n) {
-    return { label: 'White-box test #' + n, onClick: function () {
+    return { label: 'White-box #' + n + ': ' + WB[n][0] + ' (' + WB[n][1] + ')', onClick: function () {
       W.store.set('published0712', false); R.loadTestCase(n); slot = 0; seat = null; flash('', ''); poolMsg('');
-      render(); W.toast('Test case #' + n + ' loaded into Mon 07 Dec, Day. Click Publish roster.');
+      render(); W.toast('White-box test #' + n + ' loaded into Mon 07 Dec, Day (' + WB[n][0] + '). Press Publish roster: it should be ' + WB[n][1] + '.');
     } };
   });
+  function reminder() {
+    if (locked()) { W.toast('This roster is already published, so no reminder is sent.'); return; }
+    var short = R.shortSlots().length;
+    W.notify('Reminder: roster for 07 – 13 Dec 2026 is still in Draft. It publishes at Mon 30 Nov, 08:00 (14 hours left)' + (short ? ' only if ' + short + (short === 1 ? ' slot is' : ' slots are') + ' fixed first.' : '.'));
+    flash('', '<p><strong>Reminder: 14 hours to the publication deadline.</strong> ' + (short ? short + (short === 1 ? ' slot is' : ' slots are') + ' below the minimum of 6 fully staffed ambulances.' : 'Every slot meets the minimum.') + '</p>');
+  }
   W.controls(ctl.concat([
+    { label: 'Simulate Sun 29 Nov, 18:00 reminder (NFR-17)', onClick: reminder },
     { label: 'Simulate Mon 30 Nov, 08:00 deadline (NFR-17)', onClick: deadline },
     { label: 'Reset roster to starting draft', onClick: function () { W.store.set('roster.0712', null); W.store.set('published0712', false); W.store.set('mgr.rejections', null); location.href = 'manager-allocation.html'; } }
   ]));
